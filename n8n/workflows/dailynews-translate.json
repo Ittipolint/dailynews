@@ -1,0 +1,77 @@
+{
+  "name": "DailyNews - Translate News (th/en/zh)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "cron-translate",
+      "name": "Run every 1 hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {} }];"
+      },
+      "id": "code-trigger",
+      "name": "Empty Trigger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.DAILYNEWS_API_BASE_URL}}/api/v1/news?q=translate&limit=20",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "http-news",
+      "name": "Fetch Untranslated News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Translation is executed by the Laravel translation pipeline (artisan dailynews:translate).\n// This workflow serves as a scheduled trigger and health check.\nconst data = $input.first().json.data || [];\nreturn [{ json: { pending: data.length, message: 'Translation pipeline runs via artisan dailynews:translate --limit=20' } }];"
+      },
+      "id": "code-note",
+      "name": "Note / Health Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 0]
+    }
+  ],
+  "connections": {
+    "Run every 1 hour": {
+      "main": [
+        [{ "node": "Empty Trigger", "type": "main", "index": 0 }]
+      ]
+    },
+    "Empty Trigger": {
+      "main": [
+        [{ "node": "Fetch Untranslated News", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Untranslated News": {
+      "main": [
+        [{ "node": "Note / Health Check", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true
+}

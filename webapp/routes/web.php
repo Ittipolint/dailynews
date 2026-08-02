@@ -1,0 +1,111 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/', fn () => redirect()->route('admin.dashboard'));
+
+Route::middleware('guest')->group(function (): void {
+    Route::view('/login', 'auth.login')->name('login');
+    Route::post('/login', [\App\Http\Controllers\Auth\LoginController::class, 'login'])
+        ->middleware('throttle:10,1');
+});
+
+Route::middleware('auth')->group(function (): void {
+    Route::post('/logout', [\App\Http\Controllers\Auth\LoginController::class, 'logout'])
+        ->name('logout');
+
+    Route::prefix('admin')->name('admin.')->group(function (): void {
+        Route::get('/', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])
+            ->name('dashboard');
+
+        // News Source management (Reference Data)
+        Route::resource('sources', \App\Http\Controllers\Admin\NewsSourceController::class)
+            ->except(['show']);
+        Route::patch('sources/{source}/toggle', [\App\Http\Controllers\Admin\NewsSourceController::class, 'toggle'])
+            ->name('sources.toggle');
+        Route::post('sources/{source}/test', [\App\Http\Controllers\Admin\NewsSourceController::class, 'testConnection'])
+            ->name('sources.test');
+
+        // Members management
+        Route::resource('members', \App\Http\Controllers\Admin\MemberController::class)
+            ->except(['show']);
+        Route::patch('members/{member}/toggle', [\App\Http\Controllers\Admin\MemberController::class, 'toggle'])
+            ->name('members.toggle');
+
+        // Member channels / interests / schedules
+        Route::get('members/{member}/channels', [\App\Http\Controllers\Admin\MemberChannelController::class, 'index'])
+            ->name('members.channels.index');
+        Route::post('members/{member}/channels', [\App\Http\Controllers\Admin\MemberChannelController::class, 'store'])
+            ->name('members.channels.store');
+        Route::patch('channels/{channel}', [\App\Http\Controllers\Admin\MemberChannelController::class, 'update'])
+            ->name('members.channels.update');
+        Route::delete('channels/{channel}', [\App\Http\Controllers\Admin\MemberChannelController::class, 'destroy'])
+            ->name('members.channels.destroy');
+
+        Route::get('members/{member}/interests', [\App\Http\Controllers\Admin\MemberInterestController::class, 'index'])
+            ->name('members.interests.index');
+        Route::post('members/{member}/interests', [\App\Http\Controllers\Admin\MemberInterestController::class, 'store'])
+            ->name('members.interests.store');
+        Route::delete('interests/{interest}', [\App\Http\Controllers\Admin\MemberInterestController::class, 'destroy'])
+            ->name('members.interests.destroy');
+
+        Route::get('members/{member}/schedules', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'index'])
+            ->name('members.schedules.index');
+        Route::post('members/{member}/schedules', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'store'])
+            ->name('members.schedules.store');
+        Route::patch('schedules/{schedule}', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'update'])
+            ->name('members.schedules.update');
+        Route::delete('schedules/{schedule}', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'destroy'])
+            ->name('members.schedules.destroy');
+
+        // News search (Admin only)
+        Route::get('news', [\App\Http\Controllers\Admin\NewsSearchController::class, 'index'])
+            ->name('news.index');
+
+        // Dashboard data endpoints (JSON, for charts)
+        Route::get('dashboard/stats', [\App\Http\Controllers\Admin\DashboardController::class, 'stats'])
+            ->name('dashboard.stats');
+        Route::get('dashboard/export', [\App\Http\Controllers\Admin\DashboardController::class, 'export'])
+            ->name('dashboard.export');
+
+        // Credentials (system)
+        Route::get('credentials', [\App\Http\Controllers\Admin\CredentialController::class, 'index'])
+            ->name('credentials.index');
+        Route::put('credentials/{credential}', [\App\Http\Controllers\Admin\CredentialController::class, 'update'])
+            ->name('credentials.update');
+
+        // Categories
+        Route::resource('categories', \App\Http\Controllers\Admin\CategoryController::class)
+            ->except(['show']);
+    });
+
+    Route::prefix('member')->name('member.')->group(function (): void {
+        Route::get('/', [\App\Http\Controllers\Member\ProfileController::class, 'index'])
+            ->name('dashboard');
+        Route::get('channels', [\App\Http\Controllers\Member\ProfileController::class, 'channels'])
+            ->name('channels');
+        Route::post('channels', [\App\Http\Controllers\Member\ProfileController::class, 'storeChannel'])
+            ->name('channels.store');
+        Route::get('interests', [\App\Http\Controllers\Member\ProfileController::class, 'interests'])
+            ->name('interests');
+        Route::post('interests', [\App\Http\Controllers\Member\ProfileController::class, 'storeInterest'])
+            ->name('interests.store');
+        Route::get('schedules', [\App\Http\Controllers\Member\ProfileController::class, 'schedules'])
+            ->name('schedules');
+        Route::post('schedules', [\App\Http\Controllers\Member\ProfileController::class, 'storeSchedule'])
+            ->name('schedules.store');
+    });
+
+    Route::prefix('chat')->name('chat.')->group(function (): void {
+        Route::get('/', [\App\Http\Controllers\ChatController::class, 'index'])
+            ->name('index');
+        Route::post('ask', [\App\Http\Controllers\ChatController::class, 'ask'])
+            ->name('ask');
+    });
+});
