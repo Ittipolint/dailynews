@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MemberChannel extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'member_id', 'channel_type', 'credentials', 'is_active',

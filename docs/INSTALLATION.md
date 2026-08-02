@@ -5,7 +5,7 @@
 ## 1. ข้อกำหนดเบื้องต้น (Prerequisites)
 
 ### Server (Ubuntu 22.04+)
-- PHP 8.2+ (พร้อม extensions: `pdo_mysql`, `pdo_pgsql`, `mbstring`, `curl`, `simplexml`, `redis`, `zip`)
+- PHP 8.4+ (พร้อม extensions: `pdo_mysql`, `pdo_pgsql`, `mbstring`, `curl`, `simplexml`, `redis`, `zip`)
 - Composer 2.x
 - Nginx
 - MySQL 8.x (สำหรับ Web Application framework DB)
@@ -16,8 +16,8 @@
 
 ```bash
 sudo apt update
-sudo apt install -y php8.3-fpm php8.3-cli php8.3-mysql php8.3-pgsql php8.3-mbstring \
-    php8.3-curl php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl php8.3-redis \
+sudo apt install -y php8.4-fpm php8.4-cli php8.4-mysql php8.4-pgsql php8.4-mbstring 
+    php8.4-curl php8.4-xml php8.4-zip php8.4-bcmath php8.4-intl php8.4-redis 
     composer nginx mysql-server postgresql postgresql-contrib redis-server
 ```
 
@@ -120,7 +120,7 @@ location ^~ /dailynews {
 
     location ~ ^/dailynews/.*\.php$ {
         alias /var/www/dailynews/webapp/public;
-        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
         fastcgi_index index.php;
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME $request_filename;

@@ -2,7 +2,7 @@
 # ============================================================
 # DailyNews - Ubuntu deployment script (Phase 1)
 # Target: https://ittipolint-sbu.veya.co.th/dailynews
-# Prereq: PHP 8.2+, Composer, Nginx, PostgreSQL, MySQL, Redis
+# Prereq: PHP 8.4+, Composer, Nginx, PostgreSQL, MySQL, Redis
 # ============================================================
 set -euo pipefail
 

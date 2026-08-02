@@ -89,8 +89,8 @@ class DeliveryService
         if ($keywords->isNotEmpty()) {
             $query->where(function ($q) use ($keywords): void {
                 foreach ($keywords as $keyword) {
-                    $q->orWhere('title', 'ilike', "%{$keyword}%")
-                        ->orWhere('summary', 'ilike', "%{$keyword}%");
+                    $q->orWhere('title', 'like', "%{$keyword}%")
+                        ->orWhere('summary', 'like', "%{$keyword}%");
                 }
             });
         }

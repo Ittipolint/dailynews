@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DeliveryLog extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'member_id', 'schedule_id', 'channel_type', 'news_ids',

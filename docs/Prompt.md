@@ -41,24 +41,24 @@
    2.7 เลือก Framework ที่นิยมใช้กันแพร่หลายและเป็นมาตราฐาน
    2.8 Technology tools ต่างๆที่ใช้นอกเหนือจากนี้ให้กำหนดลงมาใน Software Specification ให้ครบ
 3. Credential ต่างๆที่สำคัญในการสร้างและติดตั้งระบบ
-   3.1 Web Server และ Database server
-       3.1.1 https://ittipolint-sbu.veya.co.th  โดยให้สร้าง sub ใหม่ชื่อ /dailynews
-       3.1.2 FTP IP: 119.59.116.53
+    3.1 Web Server และ Database server
+        3.1.1 https://ittipolint-sbu.veya.co.th  โดยให้สร้าง sub ใหม่ชื่อ /dailynews
+        3.1.2 FTP IP: 119.59.116.53
                  User: ittipolint
-                 Pass: <REDACTED>
-       3.1.3 Database name: ittipolint_dailynews
+                 Pass: <REDACTED - stored in deploy secrets>
+        3.1.3 Database name: ittipolint_dailynews
                  User: ittipolint_dailynews
-                 Pass: <REDACTED>
-   3.2 n8n Server
-       3.2.1 https://n8n38-sbu.veya.co.th
-       3.2.2 user: ittipolint@gmail.com
-       3.2.3 pass: <REDACTED>
-       3.2.4 n8n API https:  <REDACTED>
+                 Pass: <REDACTED - stored in deploy secrets>
+    3.2 n8n Server
+        3.2.1 https://n8n38-sbu.veya.co.th
+        3.2.2 user: ittipolint@gmail.com
+        3.2.3 pass: <REDACTED - stored in deploy secrets>
+        3.2.4 n8n API key: <REDACTED - stored in deploy secrets>
     3.3 LINE Messaging API สำหรับการทดสอบ
-        3.3.1 Channel id.: 1528339539
+        3.3.1 Channel id.: <REDACTED - stored in deploy secrets>
         3.3.2 Channel name: Ittipol@
-        3.3.3 Channel secret: <REDACTED>
-        3.3.4 Channel access token: <REDACTED>
+        3.3.3 Channel secret: <REDACTED - stored in deploy secrets>
+        3.3.4 Channel access token: <REDACTED - stored in deploy secrets>
         3.3.5 Webhook URL: https://n8n38-sbu.veya.co.th/webhook/line
    3.4 Email สำหรับส่งทดสอบ:
         3.4.1 Email sender: DailyNews

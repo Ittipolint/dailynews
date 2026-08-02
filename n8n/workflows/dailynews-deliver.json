@@ -1,222 +1,363 @@
 {
-  "name": "DailyNews - Deliver News to Members",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 1
-            }
-          ]
-        }
-      },
-      "id": "cron-deliver",
-      "name": "Run every 1 minute",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [0, 0]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{$env.DAILYNEWS_API_BASE_URL}}/api/v1/schedules/due",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "id": "http-schedules",
-      "name": "Get Due Schedules",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [240, 0]
-    },
-    {
-      "parameters": {
-        "values": {
-          "parameter": "data",
-          "inputType": "json",
-          "mode": "raw",
-          "json": "={{ $json.data }}"
-        }
-      },
-      "id": "split-schedules",
-      "name": "Split Schedules",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [480, 0]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{$env.DAILYNEWS_API_BASE_URL}}/api/v1/news?limit=10&from={{ $now.set({ hour: 0, minute: 0, second: 0 }).toISO() }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "id": "http-news",
-      "name": "Fetch News",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [720, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "const schedule = $('Split Schedules').item.json;\nconst news = $('Fetch News').first().json.data || [];\n\nif (news.length === 0) {\n  return [{ json: { skipped: true, reason: 'no news' } }];\n}\n\nconst lines = news.slice(0, 5).map(n => `\\u2022 ${n.title}\\n${n.source_url}`).join('\\n\\n');\nconst message = `DailyNews \\u2014 ${schedule.name}\\n\\n${lines}`;\n\nreturn [{\n  json: {\n    schedule: schedule,\n    message: message,\n    news_ids: news.map(n => n.id),\n    channels: schedule.channels || []\n  }\n}];"
-      },
-      "id": "code-build",
-      "name": "Build Message",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [960, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nif (data.skipped) {\n  return [{ json: { skipped: true } }];\n}\n\nconst outputs = [];\nfor (const channel of data.channels) {\n  outputs.push({\n    json: {\n      schedule: data.schedule,\n      message: data.message,\n      news_ids: data.news_ids,\n      channel_type: channel\n    }\n  });\n}\n\nreturn outputs;"
-      },
-      "id": "code-fanout",
-      "name": "Fanout per Channel",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1200, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nif (data.skipped) {\n  return [{ json: { status: 'skipped' } }];\n}\n\nif (data.channel_type === 'line_personal' || data.channel_type === 'line_oa') {\n  return [{ json: data }];\n}\n\nreturn [];"
-      },
-      "id": "if-line",
-      "name": "Is LINE channel?",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1440, 0]
-    },
-    {
-      "parameters": {
-        "lineChannelAccessToken": "={{$env.LINE_ACCESS_TOKEN}}",
-        "messageType": "text",
-        "text": "={{ $json.message }}",
-        "options": {},
-        "to": "={{ $json.schedule.member.line_user_id || $json.schedule.member.line_oa_user_id }}"
-      },
-      "id": "line-send",
-      "name": "Send via LINE",
-      "type": "n8n-nodes-base.line",
-      "typeVersion": 1,
-      "position": [1680, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "return [{ json: { status: 'success', channel_type: $input.first().json.channel_type } }];"
-      },
-      "id": "code-line-log",
-      "name": "LINE Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1920, 0]
-    },
-    {
-      "parameters": {
-        "toEmail": "={{ $json.schedule.member.email }}",
-        "subject": "DailyNews \\u2014 {{ $json.schedule.name }}",
-        "emailFormat": "text",
-        "text": "={{ $json.message }}",
-        "options": {}
-      },
-      "id": "email-send",
-      "name": "Send via Email",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2,
-      "position": [1440, 120]
-    },
-    {
-      "parameters": {
-        "jsCode": "return [{ json: { status: 'success', channel_type: 'email' } }];"
-      },
-      "id": "code-email-log",
-      "name": "Email Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1680, 120]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{$env.DAILYNEWS_API_BASE_URL}}/api/v1/deliveries",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{\n  member_id: $json.schedule.member.id,\n  channel_type: $json.channel_type,\n  news_ids: $json.news_ids,\n  status: $json.status === 'skipped' ? 'success' : $json.status\n}}",
-        "options": {}
-      },
-      "id": "http-log",
-      "name": "Record Delivery Log",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2160, 0]
-    }
-  ],
-  "connections": {
-    "Run every 1 minute": {
-      "main": [
-        [{ "node": "Get Due Schedules", "type": "main", "index": 0 }]
-      ]
-    },
-    "Get Due Schedules": {
-      "main": [
-        [{ "node": "Split Schedules", "type": "main", "index": 0 }]
-      ]
-    },
-    "Split Schedules": {
-      "main": [
-        [{ "node": "Fetch News", "type": "main", "index": 0 }]
-      ]
-    },
-    "Fetch News": {
-      "main": [
-        [{ "node": "Build Message", "type": "main", "index": 0 }]
-      ]
-    },
-    "Build Message": {
-      "main": [
-        [{ "node": "Fanout per Channel", "type": "main", "index": 0 }]
-      ]
-    },
-    "Fanout per Channel": {
-      "main": [
-        [{ "node": "Is LINE channel?", "type": "main", "index": 0 }]
-      ]
-    },
-    "Is LINE channel?": {
-      "main": [
-        [{ "node": "Send via LINE", "type": "main", "index": 0 }],
-        [{ "node": "Send via Email", "type": "main", "index": 0 }]
-      ]
-    },
-    "Send via LINE": {
-      "main": [
-        [{ "node": "LINE Result", "type": "main", "index": 0 }]
-      ]
-    },
-    "LINE Result": {
-      "main": [
-        [{ "node": "Record Delivery Log", "type": "main", "index": 0 }]
-      ]
-    },
-    "Send via Email": {
-      "main": [
-        [{ "node": "Email Result", "type": "main", "index": 0 }]
-      ]
-    },
-    "Email Result": {
-      "main": [
-        [{ "node": "Record Delivery Log", "type": "main", "index": 0 }]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "active": true
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "name":  "DailyNews - Deliver News to Members",
+    "connections":  {
+                        "Run every 1 minute":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Get Due Schedules",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Get Due Schedules":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Split Schedules",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Split Schedules":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Fetch News",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Fetch News":  {
+                                           "main":  [
+                                                        [
+                                                            {
+                                                                "node":  "Build Message",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       },
+                        "Build Message":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Fanout per Channel",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Fanout per Channel":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Is LINE channel?",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Is LINE channel?":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Send via LINE",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ],
+                                                              [
+                                                                  {
+                                                                      "node":  "Send via Email",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Send via LINE":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "LINE Result",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "LINE Result":  {
+                                            "main":  [
+                                                         [
+                                                             {
+                                                                 "node":  "Record Delivery Log",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                                     ]
+                                        },
+                        "Send via Email":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Email Result",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Email Result":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Record Delivery Log",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         }
+                    },
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "minutes",
+                                                                           "minutesInterval":  1
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "id":  "cron-deliver",
+                      "name":  "Run every 1 minute",
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "https://ittipolint-sbu.veya.co.th/dailynews/api/v1/schedules/due",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "http-schedules",
+                      "name":  "Get Due Schedules",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       240,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "tjTHYNN0eR5OYkDc",
+                                                                 "name":  "DailyNews API Token"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "parameter":  "data",
+                                                        "inputType":  "json",
+                                                        "mode":  "raw",
+                                                        "json":  "={{ $json.data }}"
+                                                    }
+                                     },
+                      "id":  "split-schedules",
+                      "name":  "Split Schedules",
+                      "type":  "n8n-nodes-base.splitInBatches",
+                      "typeVersion":  3,
+                      "position":  [
+                                       480,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "https://ittipolint-sbu.veya.co.th/dailynews/api/v1/news?limit=10\u0026from={{ $now.set({ hour: 0, minute: 0, second: 0 }).toISO() }}",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "http-news",
+                      "name":  "Fetch News",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       720,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "tjTHYNN0eR5OYkDc",
+                                                                 "name":  "DailyNews API Token"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const schedule = $(\u0027Split Schedules\u0027).item.json;\nconst news = $(\u0027Fetch News\u0027).first().json.data || [];\n\nif (news.length === 0) {\n  return [{ json: { skipped: true, reason: \u0027no news\u0027 } }];\n}\n\nconst lines = news.slice(0, 5).map(n =\u003e `\\u2022 ${n.title}\\n${n.source_url}`).join(\u0027\\n\\n\u0027);\nconst message = `DailyNews \\u2014 ${schedule.name}\\n\\n${lines}`;\n\nreturn [{\n  json: {\n    schedule: schedule,\n    message: message,\n    news_ids: news.map(n =\u003e n.id),\n    channels: schedule.channels || []\n  }\n}];"
+                                     },
+                      "id":  "code-build",
+                      "name":  "Build Message",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       960,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const data = $input.first().json;\n\nif (data.skipped) {\n  return [{ json: { skipped: true } }];\n}\n\nconst outputs = [];\nfor (const channel of data.channels) {\n  outputs.push({\n    json: {\n      schedule: data.schedule,\n      message: data.message,\n      news_ids: data.news_ids,\n      channel_type: channel\n    }\n  });\n}\n\nreturn outputs;"
+                                     },
+                      "id":  "code-fanout",
+                      "name":  "Fanout per Channel",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1200,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const data = $input.first().json;\n\nif (data.skipped) {\n  return [{ json: { status: \u0027skipped\u0027 } }];\n}\n\nif (data.channel_type === \u0027line_personal\u0027 || data.channel_type === \u0027line_oa\u0027) {\n  return [{ json: data }];\n}\n\nreturn [];"
+                                     },
+                      "id":  "if-line",
+                      "name":  "Is LINE channel?",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1440,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "messageType":  "text",
+                                         "text":  "={{ $json.message }}",
+                                         "options":  {
+
+                                                     },
+                                         "to":  "={{ $json.schedule.member.line_user_id || $json.schedule.member.line_oa_user_id }}"
+                                     },
+                      "id":  "line-send",
+                      "name":  "Send via LINE",
+                      "type":  "n8n-nodes-base.line",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1680,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "lineMessagingApi":  {
+                                                                   "id":  "uNKITQnuux2ukqqC",
+                                                                   "name":  "Line Messaging account"
+                                                               }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{ json: { status: \u0027success\u0027, channel_type: $input.first().json.channel_type } }];"
+                                     },
+                      "id":  "code-line-log",
+                      "name":  "LINE Result",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1920,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "toEmail":  "={{ $json.schedule.member.email }}",
+                                         "subject":  "DailyNews \\u2014 {{ $json.schedule.name }}",
+                                         "emailFormat":  "text",
+                                         "text":  "={{ $json.message }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "email-send",
+                      "name":  "Send via Email",
+                      "type":  "n8n-nodes-base.emailSend",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1440,
+                                       120
+                                   ],
+                      "webhookId":  "a2f87854-f1cf-4147-9313-539e7169d96d"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "return [{ json: { status: \u0027success\u0027, channel_type: \u0027email\u0027 } }];"
+                                     },
+                      "id":  "code-email-log",
+                      "name":  "Email Result",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1680,
+                                       120
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://ittipolint-sbu.veya.co.th/dailynews/api/v1/deliveries",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{\n  member_id: $json.schedule.member.id,\n  channel_type: $json.channel_type,\n  news_ids: $json.news_ids,\n  status: $json.status === \u0027skipped\u0027 ? \u0027success\u0027 : $json.status\n}}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "http-log",
+                      "name":  "Record Delivery Log",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       2160,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "tjTHYNN0eR5OYkDc",
+                                                                 "name":  "DailyNews API Token"
+                                                             }
+                                      }
+                  }
+              ]
 }

@@ -11,7 +11,7 @@ class Member extends Model
 {
     use SoftDeletes;
 
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'member_type_id', 'name', 'email', 'line_user_id', 'line_oa_user_id',

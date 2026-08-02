@@ -1,146 +1,220 @@
 {
-  "name": "DailyNews - Ingest RSS Sources",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "hours",
-              "hoursInterval": 1
-            }
-          ]
-        }
-      },
-      "id": "cron-ingest",
-      "name": "Run every 1 hour",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [0, 0]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{$env.DAILYNEWS_API_BASE_URL}}/api/v1/sources",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "id": "http-sources",
-      "name": "Get Active Sources",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [240, 0]
-    },
-    {
-      "parameters": {
-        "values": {
-          "parameter": "data",
-          "inputType": "json",
-          "mode": "raw",
-          "json": "={{ $json.data }}"
-        }
-      },
-      "id": "split-sources",
-      "name": "Split Sources",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [480, 0]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $json.feed_url || $json.url }}",
-        "options": {
-          "headers": {
-            "User-Agent": "DailyNewsBot/1.0"
-          }
-        }
-      },
-      "id": "http-feed",
-      "name": "Fetch Feed",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [720, 0]
-    },
-    {
-      "parameters": {
-        "keepOnlyFields": {
-          "title": true,
-          "link": true,
-          "description": true,
-          "pubDate": true
-        },
-        "options": {}
-      },
-      "id": "rss-read",
-      "name": "Parse RSS",
-      "type": "n8n-nodes-base.rssFeedRead",
-      "typeVersion": 1.1,
-      "position": [960, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "const items = $input.all().map(i => ({\n  title: i.json.title,\n  url: i.json.link,\n  summary: i.json.description,\n  published_at: i.json.pubDate\n}));\n\nreturn [{ json: {\n  source: $('Split Sources').item.json.slug,\n  items: items\n} }];"
-      },
-      "id": "code-build",
-      "name": "Build Push Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1200, 0]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{$env.DAILYNEWS_API_BASE_URL}}/api/ingest/push",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $json | { source: $json.source, items: $json.items } }}",
-        "options": {}
-      },
-      "id": "http-push",
-      "name": "Push to DailyNews",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1440, 0]
-    }
-  ],
-  "connections": {
-    "Run every 1 hour": {
-      "main": [
-        [{ "node": "Get Active Sources", "type": "main", "index": 0 }]
-      ]
-    },
-    "Get Active Sources": {
-      "main": [
-        [{ "node": "Split Sources", "type": "main", "index": 0 }]
-      ]
-    },
-    "Split Sources": {
-      "main": [
-        [{ "node": "Fetch Feed", "type": "main", "index": 0 }]
-      ]
-    },
-    "Fetch Feed": {
-      "main": [
-        [{ "node": "Parse RSS", "type": "main", "index": 0 }]
-      ]
-    },
-    "Parse RSS": {
-      "main": [
-        [{ "node": "Build Push Payload", "type": "main", "index": 0 }]
-      ]
-    },
-    "Build Push Payload": {
-      "main": [
-        [{ "node": "Push to DailyNews", "type": "main", "index": 0 }]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "active": true
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "name":  "DailyNews - Ingest RSS Sources",
+    "connections":  {
+                        "Run every 1 hour":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Get Active Sources",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Get Active Sources":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Split Sources",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Split Sources":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Fetch Feed",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Fetch Feed":  {
+                                           "main":  [
+                                                        [
+                                                            {
+                                                                "node":  "Parse RSS",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       },
+                        "Parse RSS":  {
+                                          "main":  [
+                                                       [
+                                                           {
+                                                               "node":  "Build Push Payload",
+                                                               "type":  "main",
+                                                               "index":  0
+                                                           }
+                                                       ]
+                                                   ]
+                                      },
+                        "Build Push Payload":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Push to DailyNews",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               }
+                    },
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "hours",
+                                                                           "hoursInterval":  1
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "id":  "cron-ingest",
+                      "name":  "Run every 1 hour",
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "https://ittipolint-sbu.veya.co.th/dailynews/api/v1/sources",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "http-sources",
+                      "name":  "Get Active Sources",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       240,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "tjTHYNN0eR5OYkDc",
+                                                                 "name":  "DailyNews API Token"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "parameter":  "data",
+                                                        "inputType":  "json",
+                                                        "mode":  "raw",
+                                                        "json":  "={{ $json.data }}"
+                                                    }
+                                     },
+                      "id":  "split-sources",
+                      "name":  "Split Sources",
+                      "type":  "n8n-nodes-base.splitInBatches",
+                      "typeVersion":  3,
+                      "position":  [
+                                       480,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "={{ $json.feed_url || $json.url }}",
+                                         "options":  {
+                                                         "headers":  {
+                                                                         "User-Agent":  "DailyNewsBot/1.0"
+                                                                     }
+                                                     }
+                                     },
+                      "id":  "http-feed",
+                      "name":  "Fetch Feed",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       720,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "keepOnlyFields":  {
+                                                                "title":  true,
+                                                                "link":  true,
+                                                                "description":  true,
+                                                                "pubDate":  true
+                                                            },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "rss-read",
+                      "name":  "Parse RSS",
+                      "type":  "n8n-nodes-base.rssFeedRead",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       960,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const items = $input.all().map(i =\u003e ({\n  title: i.json.title,\n  url: i.json.link,\n  summary: i.json.description,\n  published_at: i.json.pubDate\n}));\n\nreturn [{ json: {\n  source: $(\u0027Split Sources\u0027).item.json.slug,\n  items: items\n} }];"
+                                     },
+                      "id":  "code-build",
+                      "name":  "Build Push Payload",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1200,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://ittipolint-sbu.veya.co.th/dailynews/api/ingest/push",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ $json | { source: $json.source, items: $json.items } }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "http-push",
+                      "name":  "Push to DailyNews",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1440,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "tjTHYNN0eR5OYkDc",
+                                                                 "name":  "DailyNews API Token"
+                                                             }
+                                      }
+                  }
+              ]
 }

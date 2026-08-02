@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Credential extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'code', 'name', 'config', 'is_active', 'updated_by', 'last_tested_at',

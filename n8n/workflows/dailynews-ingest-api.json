@@ -1,159 +1,231 @@
 {
-  "name": "DailyNews - Ingest API Sources",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "hours",
-              "hoursInterval": 1
-            }
-          ]
-        }
-      },
-      "id": "cron-api",
-      "name": "Run every 1 hour",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [0, 0]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{$env.DAILYNEWS_API_BASE_URL}}/api/v1/sources",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "id": "http-sources",
-      "name": "Get Sources",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [240, 0]
-    },
-    {
-      "parameters": {
-        "values": {
-          "parameter": "data",
-          "inputType": "json",
-          "mode": "raw",
-          "json": "={{ $json.data }}"
-        }
-      },
-      "id": "split-api",
-      "name": "Split Sources",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [480, 0]
-    },
-    {
-      "parameters": {
-        "condition": {
-          "options": {
-            "caseSensitive": true
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.fetch_type }}",
-              "rightValue": "api",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            }
-          ]
-        }
-      },
-      "id": "if-api",
-      "name": "Is API Source?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [720, 0]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $json.feed_url }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {
-          "response": {
-            "response": {
-              "responseFormat": "json"
-            }
-          }
-        }
-      },
-      "id": "http-api",
-      "name": "Call API",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [960, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst articles = raw.articles || raw.data || raw.results || [];\n\nconst items = articles.map(a => ({\n  title: a.title,\n  url: a.url || a.link,\n  summary: a.description || a.summary || '',\n  published_at: a.publishedAt || a.published_at || a.publishedat || null\n}));\n\nreturn [{ json: {\n  source: $('Split Sources').item.json.slug,\n  items: items\n} }];"
-      },
-      "id": "code-normalize",
-      "name": "Normalize API Data",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1200, 0]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{$env.DAILYNEWS_API_BASE_URL}}/api/ingest/push",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $json }}",
-        "options": {}
-      },
-      "id": "http-push",
-      "name": "Push to DailyNews",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1440, 0]
-    }
-  ],
-  "connections": {
-    "Run every 1 hour": {
-      "main": [
-        [{ "node": "Get Sources", "type": "main", "index": 0 }]
-      ]
-    },
-    "Get Sources": {
-      "main": [
-        [{ "node": "Split Sources", "type": "main", "index": 0 }]
-      ]
-    },
-    "Split Sources": {
-      "main": [
-        [{ "node": "Is API Source?", "type": "main", "index": 0 }]
-      ]
-    },
-    "Is API Source?": {
-      "main": [
-        [{ "node": "Call API", "type": "main", "index": 0 }],
-        []
-      ]
-    },
-    "Call API": {
-      "main": [
-        [{ "node": "Normalize API Data", "type": "main", "index": 0 }]
-      ]
-    },
-    "Normalize API Data": {
-      "main": [
-        [{ "node": "Push to DailyNews", "type": "main", "index": 0 }]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "active": true
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "name":  "DailyNews - Ingest API Sources",
+    "connections":  {
+                        "Run every 1 hour":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Get Sources",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Get Sources":  {
+                                            "main":  [
+                                                         [
+                                                             {
+                                                                 "node":  "Split Sources",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                                     ]
+                                        },
+                        "Split Sources":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Is API Source?",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Is API Source?":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Call API",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ],
+                                                            [
+
+                                                            ]
+                                                        ]
+                                           },
+                        "Call API":  {
+                                         "main":  [
+                                                      [
+                                                          {
+                                                              "node":  "Normalize API Data",
+                                                              "type":  "main",
+                                                              "index":  0
+                                                          }
+                                                      ]
+                                                  ]
+                                     },
+                        "Normalize API Data":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Push to DailyNews",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               }
+                    },
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "hours",
+                                                                           "hoursInterval":  1
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "id":  "cron-api",
+                      "name":  "Run every 1 hour",
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "https://ittipolint-sbu.veya.co.th/dailynews/api/v1/sources",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "http-sources",
+                      "name":  "Get Sources",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       240,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "tjTHYNN0eR5OYkDc",
+                                                                 "name":  "DailyNews API Token"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "values":  {
+                                                        "parameter":  "data",
+                                                        "inputType":  "json",
+                                                        "mode":  "raw",
+                                                        "json":  "={{ $json.data }}"
+                                                    }
+                                     },
+                      "id":  "split-api",
+                      "name":  "Split Sources",
+                      "type":  "n8n-nodes-base.splitInBatches",
+                      "typeVersion":  3,
+                      "position":  [
+                                       480,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "condition":  {
+                                                           "options":  {
+                                                                           "caseSensitive":  true
+                                                                       },
+                                                           "conditions":  [
+                                                                              {
+                                                                                  "leftValue":  "={{ $json.fetch_type }}",
+                                                                                  "rightValue":  "api",
+                                                                                  "operator":  {
+                                                                                                   "type":  "string",
+                                                                                                   "operation":  "equals"
+                                                                                               }
+                                                                              }
+                                                                          ]
+                                                       }
+                                     },
+                      "id":  "if-api",
+                      "name":  "Is API Source?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2,
+                      "position":  [
+                                       720,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "={{ $json.feed_url }}",
+                                         "options":  {
+                                                         "response":  {
+                                                                          "response":  {
+                                                                                           "responseFormat":  "json"
+                                                                                       }
+                                                                      }
+                                                     }
+                                     },
+                      "id":  "http-api",
+                      "name":  "Call API",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       960,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const raw = $input.first().json;\nconst articles = raw.articles || raw.data || raw.results || [];\n\nconst items = articles.map(a =\u003e ({\n  title: a.title,\n  url: a.url || a.link,\n  summary: a.description || a.summary || \u0027\u0027,\n  published_at: a.publishedAt || a.published_at || a.publishedat || null\n}));\n\nreturn [{ json: {\n  source: $(\u0027Split Sources\u0027).item.json.slug,\n  items: items\n} }];"
+                                     },
+                      "id":  "code-normalize",
+                      "name":  "Normalize API Data",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1200,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://ittipolint-sbu.veya.co.th/dailynews/api/ingest/push",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ $json }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "http-push",
+                      "name":  "Push to DailyNews",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1440,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "tjTHYNN0eR5OYkDc",
+                                                                 "name":  "DailyNews API Token"
+                                                             }
+                                      }
+                  }
+              ]
 }

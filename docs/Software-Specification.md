@@ -197,7 +197,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 | OS ของ Server | **Ubuntu (LTS)** | Opensource |
 | Workflow / Background Job (รับข่าว + ส่งข่าว) | **n8n** | Workflow engine, cron trigger, webhook |
 | ฐานข้อมูลหลัก | **PostgreSQL** | เก็บข่าว สมาชิก ระบบทั้งหมด |
-| Web Application (Frontend + Backend) | **PHP 8.x + Laravel 11** | Framework ที่นิยมและเป็นมาตรฐาน |
+| Web Application (Frontend + Backend) | **PHP 8.4.x + Laravel 12** | Framework ที่นิยมและเป็นมาตรฐาน |
 | Database ของ Web App | **MySQL** | ตามที่ติดตั้งไว้แล้ว (ใช้สำหรับข้อมูล Web app) |
 | Dashboard / BI | **Metabase** หรือ **Grafana** | Opensource ยอดนิยม; แนะนำ Metabase ใช้งานง่าย + query กับ PostgreSQL |
 | Frontend Framework | **Vue.js 3** หรือ **Laravel Blade + Alpine.js** | รองรับ SPA/CSR ที่ต้องการ |

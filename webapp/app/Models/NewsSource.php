@@ -11,7 +11,7 @@ class NewsSource extends Model
 {
     use SoftDeletes;
 
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'name', 'slug', 'url', 'locale', 'fetch_type', 'feed_url',

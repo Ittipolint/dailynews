@@ -18,8 +18,8 @@ class NewsApiController extends Controller
         if ($request->filled('q')) {
             $term = '%'.$request->get('q').'%';
             $query->where(function ($q) use ($term): void {
-                $q->where('title', 'ilike', $term)
-                    ->orWhere('summary', 'ilike', $term);
+                $q->where('title', 'like', $term)
+                    ->orWhere('summary', 'like', $term);
             });
         }
 

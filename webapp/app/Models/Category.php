@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Category extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = ['code', 'name', 'is_active'];
 

@@ -17,9 +17,9 @@ class IngestApiController extends Controller
 {
     public function push(Request $request, IngestionService $ingestion): JsonResponse
     {
-        // Simple shared-secret protection; can be tightened with HMAC in production.
-        $token = config('services.n8n.api_key');
-        $provided = $request->header('X-N8N-Token', $request->input('token'));
+        // Shared-secret protection using the same API token as the rest of the API.
+        $token = config('services.api_token');
+        $provided = $request->header('X-API-Token', $request->input('token'));
 
         if ($token && ! hash_equals((string) $token, (string) $provided)) {
             return response()->json(['error' => 'Unauthorized'], 401);

@@ -54,15 +54,15 @@ class GraphRagService
 
         $query->where(function ($q) use ($terms, $locale): void {
             foreach ($terms as $term) {
-                $q->orWhere('title', 'ilike', "%{$term}%")
-                    ->orWhere('summary', 'ilike', "%{$term}%")
-                    ->orWhere('body', 'ilike', "%{$term}%")
+                $q->orWhere('title', 'like', "%{$term}%")
+                    ->orWhere('summary', 'like', "%{$term}%")
+                    ->orWhere('body', 'like', "%{$term}%")
                     ->orWhereHas('translations', function ($tq) use ($term, $locale): void {
                         $tq->where('locale', $locale)
                             ->where(fn ($inner) => $inner
-                                ->where('title', 'ilike', "%{$term}%")
-                                ->orWhere('summary', 'ilike', "%{$term}%")
-                                ->orWhere('body', 'ilike', "%{$term}%"));
+                                ->where('title', 'like', "%{$term}%")
+                                ->orWhere('summary', 'like', "%{$term}%")
+                                ->orWhere('body', 'like', "%{$term}%"));
                     });
             }
         });

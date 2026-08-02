@@ -14,9 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->validateCsrfTokens(except: ['setup/*']);
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
             'throttle.requests' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
+            'api.token' => \App\Http\Middleware\ApiToken::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

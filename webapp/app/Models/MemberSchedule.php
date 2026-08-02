@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MemberSchedule extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'member_id', 'name', 'cron_expression', 'channels',

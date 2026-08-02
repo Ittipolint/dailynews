@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class AuditLog extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'user_id', 'action', 'entity', 'entity_id', 'old_value', 'new_value',

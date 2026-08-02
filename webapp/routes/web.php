@@ -10,6 +10,13 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('admin.dashboard'));
 
+Route::prefix('setup')->group(function (): void {
+    Route::get('status', [\App\Http\Controllers\SetupController::class, 'status'])
+        ->name('setup.status');
+    Route::post('run', [\App\Http\Controllers\SetupController::class, 'run'])
+        ->name('setup.run');
+});
+
 Route::middleware('guest')->group(function (): void {
     Route::view('/login', 'auth.login')->name('login');
     Route::post('/login', [\App\Http\Controllers\Auth\LoginController::class, 'login'])

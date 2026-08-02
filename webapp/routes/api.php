@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
 | All endpoints are protected by API token / signature verification.
 */
 
-Route::prefix('v1')->middleware('auth:sanctum')->group(function (): void {
+Route::prefix('v1')->middleware('api.token')->group(function (): void {
     Route::get('news', [\App\Http\Controllers\Api\NewsApiController::class, 'index']);
     Route::get('news/{news}', [\App\Http\Controllers\Api\NewsApiController::class, 'show']);
 

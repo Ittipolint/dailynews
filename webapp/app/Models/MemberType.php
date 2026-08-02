@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class MemberType extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = ['code', 'name', 'description', 'is_active'];
 

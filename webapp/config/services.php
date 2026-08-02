@@ -48,4 +48,6 @@ return [
 
     'credential_encryption_key' => env('CREDENTIAL_ENCRYPTION_KEY'),
 
+    'api_token' => env('API_TOKEN'),
+
 ];

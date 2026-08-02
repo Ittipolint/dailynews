@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class News extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'source_id', 'source_url', 'title', 'summary', 'body', 'category',

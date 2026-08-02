@@ -16,9 +16,9 @@ class NewsSearchService
         if (! empty($filters['q'])) {
             $term = '%'.$filters['q'].'%';
             $query->where(function ($q) use ($term): void {
-                $q->where('title', 'ilike', $term)
-                    ->orWhere('summary', 'ilike', $term)
-                    ->orWhere('body', 'ilike', $term);
+                $q->where('title', 'like', $term)
+                    ->orWhere('summary', 'like', $term)
+                    ->orWhere('body', 'like', $term);
             });
         }
 

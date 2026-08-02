@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class NewsTranslation extends Model
 {
-    protected $connection = 'pgsql';
+    
 
     protected $fillable = [
         'news_id', 'locale', 'title', 'summary', 'body',
