@@ -1,0 +1,243 @@
+{
+  "name": "DailyNews - Fetch Source Now",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "dailynews-fetch-now",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "webhook-fetch-now",
+      "name": "Fetch Now Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tjTHYNN0eR5OYkDc",
+          "name": "DailyNews API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst s = (raw.body && raw.body.source) || raw.source || {};\nreturn [{ json: { source: s } }];"
+      },
+      "id": "code-extract",
+      "name": "Extract Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "condition": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.source.fetch_type }}",
+              "rightValue": "rss",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-rss",
+      "name": "Is RSS Source?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.source.feed_url || $json.source.url }}",
+        "options": {}
+      },
+      "id": "rss-read",
+      "name": "Parse RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [720, -240]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(i => ({\n  title: i.json.title,\n  url: i.json.link,\n  summary: i.json.summary || i.json.description || i.json.contentSnippet || i.json.content || '',\n  published_at: i.json.pubDate || i.json.isoDate || null\n}));\n\nreturn [{ json: {\n  source: $('Extract Source').item.json.source.slug,\n  items: items\n} }];"
+      },
+      "id": "code-build-rss",
+      "name": "Build RSS Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, -240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ittipolint-sbu.veya.co.th/dailynews/api/ingest/push",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "http-push-rss",
+      "name": "Push RSS to DailyNews",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, -240],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tjTHYNN0eR5OYkDc",
+          "name": "DailyNews API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.source.feed_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "http-api",
+      "name": "Call API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body) ? raw.body : raw;\nconst articles = payload.articles || payload.data || payload.results || [];\n\nconst items = articles.map(a => ({\n  title: a.title,\n  url: a.url || a.link,\n  summary: a.description || a.summary || '',\n  published_at: a.publishedAt || a.published_at || null\n}));\n\nreturn [{ json: {\n  source: $('Extract Source').item.json.source.slug,\n  items: items\n} }];"
+      },
+      "id": "code-normalize-api",
+      "name": "Normalize API Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ittipolint-sbu.veya.co.th/dailynews/api/ingest/push",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "http-push-api",
+      "name": "Push API to DailyNews",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 240],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tjTHYNN0eR5OYkDc",
+          "name": "DailyNews API Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fetch Now Request": {
+      "main": [
+        [
+          {
+            "node": "Extract Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Source": {
+      "main": [
+        [
+          {
+            "node": "Is RSS Source?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is RSS Source?": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS": {
+      "main": [
+        [
+          {
+            "node": "Build RSS Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build RSS Payload": {
+      "main": [
+        [
+          {
+            "node": "Push RSS to DailyNews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call API": {
+      "main": [
+        [
+          {
+            "node": "Normalize API Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize API Data": {
+      "main": [
+        [
+          {
+            "node": "Push API to DailyNews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

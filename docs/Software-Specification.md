@@ -61,6 +61,12 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 - กำหนดรูปแบบการดึงข่าว (RSS / API / Web Crawling)
 - จัดการ Credential ของแหล่งข่าว (เช่น API Key) เก็บแบบเข้ารหัส
 - ดูประวัติการดึงข่าวล่าสุดของแต่ละแหล่ง (last fetched, status, error)
+- **ปุ่ม "ดึงข่าวทันที" (Fetch Now)** — Admin กดปุ่มในแต่ละแถวแหล่งข่าวเพื่อเรียก n8n webhook ให้ดึงข่าวจากแหล่งนั้นทันที โดยไม่ต้องรอรอบ scheduled job
+  - Web App (Laravel) ส่ง `POST` ไปยัง n8n webhook พร้อมข้อมูลของแหล่งข่าว (`slug, name, url, feed_url, fetch_type, locale`) และใช้ API Token ใน header เพื่อยืนยันตัวตน
+  - n8n workflow ตรวจสอบ `fetch_type`: ถ้าเป็น `rss` → fetch + parse feed โดยตรง, ถ้าเป็น `api` → เรียก API แล้ว normalize ข้อมูล
+  - ข้อมูลที่ได้จะถูกส่งกลับไปที่ `POST /dailynews/api/ingest/push` เพื่อบันทึกลงฐานข้อมูล (deduplicate เหมือน ingestion ปกติ)
+  - ระบบอัปเดต `last_fetched_at`, `last_status` (success/failed) และ `last_error` ของแหล่งข่าวให้ทันที
+  - หาก webhook ไม่ได้ถูก activate ใน n8n จะแสดง error 502 พร้อมข้อความแจ้งเตือน
 
 #### 2.1.3 เก็บข้อมูลข่าวลงฐานข้อมูล
 - เมื่อ n8n ดึงข่าวได้แล้วต้อง mapping ข้อมูลให้เป็นโครงสร้างมาตรฐาน แล้วบันทึกลงฐานข้อมูล Postgres
@@ -337,6 +343,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 | **LINE Channel Secret** | (ตามเอกสาร — เก็บใน Secret Management) |
 | **LINE Access Token** | (ตามเอกสาร — เก็บใน Secret Management) |
 | **LINE Webhook URL** | `https://n8n38-sbu.veya.co.th/webhook/line` |
+| **Fetch Now Webhook URL** | `https://n8n38-sbu.veya.co.th/webhook/dailynews-fetch-now` |
 | **Email Sender** | `DailyNews` |
 | **Email Receive (ทดสอบ)** | `ittipolint@gmail.com` |
 

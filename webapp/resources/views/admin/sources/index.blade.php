@@ -48,6 +48,12 @@
                             {{ $source->last_fetched_at?->diffForHumans() ?? '-' }}
                         </td>
                         <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-outline-primary fetch-now-btn"
+                                data-url="{{ route('admin.sources.fetch-now', $source) }}"
+                                data-name="{{ $source->name }}"
+                                title="ดึงข่าวทันที">
+                                <i class="bi bi-lightning-charge-fill"></i> ดึงข่าว
+                            </button>
                             <a href="{{ route('admin.sources.edit', $source) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
                             <form action="{{ route('admin.sources.toggle', $source) }}" method="POST" class="d-inline">
                                 @csrf @method('PATCH')
@@ -70,3 +76,43 @@
 </div>
 <div class="mt-3">{{ $sources->links() }}</div>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.fetch-now-btn');
+        if (!btn) return;
+
+        const url = btn.dataset.url;
+        const name = btn.dataset.name;
+        const icon = btn.querySelector('i');
+        const original = btn.innerHTML;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> ดึงข่าว...';
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'Accept': 'application/json'
+            }
+        })
+        .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, data })))
+        .then(({ ok, data }) => {
+            if (ok) {
+                alert('ดึงข่าว "' + name + '" เรียบร้อย (HTTP ' + data.status + ')');
+            } else {
+                alert('ดึงข่าว "' + name + '" ล้มเหลว: ' + (data.error || data.body?.error || 'HTTP ' + data.status));
+            }
+        })
+        .catch(err => alert('ดึงข่าว "' + name + '" ล้มเหลว: ' + err.message))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        });
+    });
+})();
+</script>
+@endpush

@@ -9,6 +9,7 @@
        1.1.4 แปลข่าวจากภาษาต้นทางมาเก็บเป็น 3 ภาษาหลัก ได้แก่ ภาษาไทย ภาษาอังกฤษ ภาษาจีน
        1.1.5 มีหน้าจอ chat สำหรับให้ค้นหาข่าวย้อนหลังเป็นระบบ AI Graph RAG
        1.1.6 ถ้ามี idea อื่นๆที่ดีก็เพิ่มเข้ามาได้
+       1.1.7 (เพิ่มเติม Requirement) มีปุ่ม "ดึงข่าวทันที" (Fetch Now) ที่หน้าจอแหล่งข่าว เพื่อให้ Admin ดึงข่าวจากแหล่งข่าวใดก็ได้ทันทีโดยไม่ต้องรอรอบ scheduled job โดยให้ไปเรียก n8n webhook และบันทึกข่าวเข้าฐานข้อมูลด้วยกลไก ingestion เดิม
    1.2 Feature การส่งข่าว (Background Job)
        1.2.1 ส่งข่าวไปยังสมาชิกตามช่องทาง และเวลาที่กำหนด
        1.2.2 สมาชิกรับข่าว แต่ละสมาชิกสามารถรับข่าวได้มากกว่า 1 ช่องทาง โดยกำหนด
@@ -54,6 +55,7 @@
         3.2.2 user: ittipolint@gmail.com
         3.2.3 pass: <REDACTED - stored in deploy secrets>
         3.2.4 n8n API key: <REDACTED - stored in deploy secrets>
+        3.2.5 Fetch Now Webhook URL (feature Fetch Now): https://n8n38-sbu.veya.co.th/webhook/dailynews-fetch-now
     3.3 LINE Messaging API สำหรับการทดสอบ
         3.3.1 Channel id.: <REDACTED - stored in deploy secrets>
         3.3.2 Channel name: Ittipol@

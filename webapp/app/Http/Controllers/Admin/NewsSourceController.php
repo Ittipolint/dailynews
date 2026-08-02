@@ -88,6 +88,57 @@ class NewsSourceController extends Controller
         }
     }
 
+    public function fetchNow(NewsSource $source): JsonResponse
+    {
+        $webhook = config('services.n8n.fetch_webhook');
+
+        if (! $webhook) {
+            return response()->json(['ok' => false, 'error' => 'n8n fetch webhook not configured'], 503);
+        }
+
+        $payload = [
+            'source' => [
+                'slug' => $source->slug,
+                'name' => $source->name,
+                'url' => $source->url,
+                'feed_url' => $source->feed_url,
+                'fetch_type' => $source->fetch_type,
+                'locale' => $source->locale,
+            ],
+        ];
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(30)
+                ->withHeaders([
+                    'X-API-Token' => (string) config('services.api_token'),
+                    'Accept' => 'application/json',
+                ])
+                ->post($webhook, $payload);
+
+            $ok = $response->successful();
+
+            $source->update([
+                'last_fetched_at' => now(),
+                'last_status' => $ok ? 'success' : 'failed',
+                'last_error' => $ok ? null : 'n8n webhook responded with HTTP '.$response->status(),
+            ]);
+
+            return response()->json([
+                'ok' => $ok,
+                'status' => $response->status(),
+                'body' => $response->json(),
+            ], $ok ? 200 : 502);
+        } catch (\Throwable $e) {
+            $source->update([
+                'last_fetched_at' => now(),
+                'last_status' => 'failed',
+                'last_error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 502);
+        }
+    }
+
     protected function validated(Request $request): array
     {
         return $request->validate([

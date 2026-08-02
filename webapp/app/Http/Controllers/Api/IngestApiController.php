@@ -42,6 +42,12 @@ class IngestApiController extends Controller
             return response()->json(['error' => 'Source not found'], 404);
         }
 
+        $source->update([
+            'last_fetched_at' => now(),
+            'last_status' => 'success',
+            'last_error' => null,
+        ]);
+
         $stored = [];
 
         foreach ($data['items'] as $item) {

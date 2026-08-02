@@ -32,6 +32,7 @@ return [
     'n8n' => [
         'url' => env('N8N_URL', 'https://n8n38-sbu.veya.co.th'),
         'api_key' => env('N8N_API_KEY'),
+        'fetch_webhook' => env('N8N_FETCH_WEBHOOK', 'https://n8n38-sbu.veya.co.th/webhook/dailynews-fetch-now'),
     ],
 
     'neo4j' => [

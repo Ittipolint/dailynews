@@ -38,6 +38,8 @@ Route::middleware('auth')->group(function (): void {
             ->name('sources.toggle');
         Route::post('sources/{source}/test', [\App\Http\Controllers\Admin\NewsSourceController::class, 'testConnection'])
             ->name('sources.test');
+        Route::post('sources/{source}/fetch-now', [\App\Http\Controllers\Admin\NewsSourceController::class, 'fetchNow'])
+            ->name('sources.fetch-now');
 
         // Members management
         Route::resource('members', \App\Http\Controllers\Admin\MemberController::class)
