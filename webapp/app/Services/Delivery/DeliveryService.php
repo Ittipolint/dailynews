@@ -9,6 +9,7 @@ use App\Models\Member;
 use App\Models\MemberChannel;
 use App\Models\MemberSchedule;
 use App\Models\News;
+use App\Services\Translation\TranslationService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -28,6 +29,8 @@ class DeliveryService
 
             return ['delivered' => 0, 'reason' => 'no matching news'];
         }
+
+        $this->ensureTranslations($news, $schedule->member->preferred_locale);
 
         $results = [];
         $channels = $schedule->channels ?: [];
@@ -107,6 +110,10 @@ class DeliveryService
             return ['ok' => false, 'error' => 'no active channels'];
         }
 
+        // Ensure every item is translated into the member's preferred locale
+        // before sending, so the delivered content matches their language.
+        $this->ensureTranslations($news, $member->preferred_locale);
+
         $results = [];
 
         foreach ($channels as $channel) {
@@ -131,6 +138,19 @@ class DeliveryService
             'channels' => array_keys($results),
             'results' => $results,
         ];
+    }
+
+    protected function ensureTranslations(iterable $news, ?string $locale): void
+    {
+        if (! $locale) {
+            return;
+        }
+
+        $translation = app(TranslationService::class);
+
+        foreach ($news as $item) {
+            $translation->translateForLocale($item, $locale);
+        }
     }
 
     protected function collectNews(MemberSchedule $schedule)

@@ -59,6 +59,39 @@ class TranslationService
         return $results;
     }
 
+    /**
+     * Ensure a translation exists for the given news in the requested locale.
+     * Returns the translation model, or null if translation failed.
+     */
+    public function translateForLocale(News $news, string $locale): ?NewsTranslation
+    {
+        $sourceLang = $news->lang ?: 'en';
+
+        $existing = $news->translation($locale);
+        if ($existing && $existing->status === 'translated') {
+            return $existing;
+        }
+
+        if ($locale === $sourceLang) {
+            return $this->copyOriginal($news, $locale)['translation'] ?? null;
+        }
+
+        try {
+            $this->translateTo($news, $locale, $sourceLang);
+
+            return $news->translation($locale);
+        } catch (\Throwable $e) {
+            $this->markFailed($news, $locale, $e->getMessage());
+            Log::channel('translation')->error('Translation failed for locale', [
+                'news_id' => $news->id,
+                'locale' => $locale,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
     protected function translateTo(News $news, string $locale, string $sourceLang): array
     {
         $driver = config('services.translation.driver', 'google');
@@ -70,7 +103,7 @@ class TranslationService
         $payload = $this->googlePayload($news, $locale);
 
         $apiKey = config('services.translation.api_key');
-        $model = config('services.translation.model', 'gemini-1.5-flash');
+        $model = config('services.translation.model', 'gemini-2.5-flash');
 
         $response = Http::timeout(90)
             ->withQueryParameters(['key' => $apiKey])
@@ -166,7 +199,7 @@ class TranslationService
             ]
         );
 
-        return ['status' => 'translated', 'translation_id' => $translation->id];
+        return ['status' => 'translated', 'translation_id' => $translation->id, 'translation' => $translation];
     }
 
     protected function markFailed(News $news, string $locale, string $error): void

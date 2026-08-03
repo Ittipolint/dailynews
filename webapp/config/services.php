@@ -7,19 +7,19 @@ return [
     'translation' => [
         'driver' => env('TRANSLATION_DRIVER', 'google'),
         'api_key' => env('GOOGLE_GEMINI_API_KEY'),
-        'model' => env('GOOGLE_GEMINI_MODEL', 'gemini-1.5-flash'),
+        'model' => env('GOOGLE_GEMINI_MODEL', 'gemini-2.5-flash'),
     ],
 
     'llm' => [
         'driver' => env('LLM_DRIVER', 'google'),
         'api_key' => env('LLM_API_KEY', env('GOOGLE_GEMINI_API_KEY')),
-        'model' => env('LLM_MODEL', 'gemini-1.5-flash'),
+        'model' => env('LLM_MODEL', 'gemini-2.5-flash'),
     ],
 
     'embedding' => [
         'driver' => env('EMBEDDING_DRIVER', 'google'),
         'api_key' => env('EMBEDDING_API_KEY', env('GOOGLE_GEMINI_API_KEY')),
-        'model' => env('EMBEDDING_MODEL', 'text-embedding-004'),
+        'model' => env('EMBEDDING_MODEL', 'gemini-embedding-001'),
     ],
 
     'line' => [
