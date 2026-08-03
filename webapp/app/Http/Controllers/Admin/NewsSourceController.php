@@ -114,6 +114,17 @@ class NewsSourceController extends Controller
             return response()->json(['ok' => false, 'error' => 'n8n fetch webhook not configured'], 503);
         }
 
+        $config = $source->config ?? [];
+
+        if ($source->fetch_type === 'crawl') {
+            $config['selectors'] = array_merge([
+                'item' => $config['selectors']['item'] ?? 'article',
+                'title' => $config['selectors']['title'] ?? 'h2 a',
+                'link' => $config['selectors']['link'] ?? 'h2 a',
+                'summary' => $config['selectors']['summary'] ?? 'p',
+            ], $config['selectors'] ?? []);
+        }
+
         $payload = [
             'source' => [
                 'slug' => $source->slug,
@@ -122,6 +133,7 @@ class NewsSourceController extends Controller
                 'feed_url' => $source->feed_url,
                 'fetch_type' => $source->fetch_type,
                 'locale' => $source->locale,
+                'config' => $config,
             ],
         ];
 

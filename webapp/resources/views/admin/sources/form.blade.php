@@ -26,11 +26,38 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">รูปแบบการดึงข้อมูล *</label>
-                            <select name="fetch_type" class="form-select" required>
+                            <select name="fetch_type" id="fetch_type" class="form-select" required>
                                 @foreach (\App\Enums\FetchType::cases() as $type)
                                     <option value="{{ $type->value }}" @selected(old('fetch_type', $source->fetch_type) === $type->value)>{{ $type->label() }}</option>
                                 @endforeach
                             </select>
+                        </div>
+                        <div class="col-md-12 d-none" id="crawl-selectors-wrap">
+                            <div class="card border-secondary">
+                                <div class="card-body py-3">
+                                    <h6 class="mb-2">Web Crawling Selectors</h6>
+                                    @php $sel = $source->config['selectors'] ?? []; @endphp
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Item Selector</label>
+                                            <input type="text" name="config[selectors][item]" class="form-control form-control-sm" value="{{ old('config.selectors.item', $sel['item'] ?? 'article') }}" placeholder="article">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Title Selector</label>
+                                            <input type="text" name="config[selectors][title]" class="form-control form-control-sm" value="{{ old('config.selectors.title', $sel['title'] ?? 'h2 a') }}" placeholder="h2 a">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Link Selector</label>
+                                            <input type="text" name="config[selectors][link]" class="form-control form-control-sm" value="{{ old('config.selectors.link', $sel['link'] ?? 'h2 a') }}" placeholder="h2 a">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Summary Selector</label>
+                                            <input type="text" name="config[selectors][summary]" class="form-control form-control-sm" value="{{ old('config.selectors.summary', $sel['summary'] ?? 'p') }}" placeholder="p">
+                                        </div>
+                                    </div>
+                                    <div class="form-text small mt-1">ใช้กับรูปแบบ Web Crawling เพื่อบอกโครงสร้าง HTML ที่ต้องการดึง (CSS Selector)</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Website URL</label>
@@ -221,6 +248,16 @@
     const catsBoxes = Array.from(document.querySelectorAll('input[name="categories[]"]'));
     if (catClear) catClear.addEventListener('click', () => catsBoxes.forEach(b => { b.checked = false; }));
     if (catAll) catAll.addEventListener('click', () => catsBoxes.forEach(b => { b.checked = true; }));
+
+    const fetchType = document.getElementById('fetch_type');
+    const crawlWrap = document.getElementById('crawl-selectors-wrap');
+    function syncCrawl() {
+        crawlWrap.classList.toggle('d-none', fetchType.value !== 'crawl');
+    }
+    if (fetchType) {
+        fetchType.addEventListener('change', syncCrawl);
+        syncCrawl();
+    }
 })();
 </script>
 @endpush
