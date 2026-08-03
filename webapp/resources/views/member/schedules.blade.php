@@ -85,12 +85,19 @@
                     </div>
                 </div>
                 <div class="col-md-12">
-                    <label class="form-label">หมวดหมู่ <span class="text-secondary fw-normal">(เลือกได้หลายหมวด — ไม่เลือก = ทั้งหมด)</span></label>
-                    <select name="categories[]" class="form-select" multiple size="4">
+                    <label class="form-label">หมวดหมู่ <span class="text-secondary fw-normal">(ไม่เลือกเลย = ทั้งหมด)</span></label>
+                    <div class="input-group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="cats-clear">ล้างทั้งหมด</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="cats-all">เลือกทั้งหมด</button>
+                    </div>
+                    <div class="form-control overflow-auto mt-1" style="max-height: 150px;">
                         @foreach ($categories as $category)
-                            <option value="{{ $category->code }}">{{ $category->name }}</option>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" name="categories[]" value="{{ $category->code }}" id="cat-{{ $category->code }}">
+                                <label class="form-check-label" for="cat-{{ $category->code }}">{{ $category->name }}</label>
+                            </div>
                         @endforeach
-                    </select>
+                    </div>
                 </div>
                 <div class="col-md-12">
                     <label class="form-label">ช่องทาง *</label>
@@ -180,6 +187,12 @@
     dom.addEventListener('change', sync);
     advanced.addEventListener('change', sync);
     sync();
+
+    const catClear = document.getElementById('cats-clear');
+    const catAll = document.getElementById('cats-all');
+    const catsBoxes = Array.from(document.querySelectorAll('input[name="categories[]"]'));
+    if (catClear) catClear.addEventListener('click', () => catsBoxes.forEach(b => { b.checked = false; }));
+    if (catAll) catAll.addEventListener('click', () => catsBoxes.forEach(b => { b.checked = true; }));
 })();
 </script>
 @endpush
