@@ -58,13 +58,21 @@
         3.2.4 n8n API key: <REDACTED - stored in deploy secrets>
         3.2.5 Fetch Now Webhook URL (feature Fetch Now): https://n8n38-sbu.veya.co.th/webhook/dailynews-fetch-now
     3.3 LINE Messaging API สำหรับการทดสอบ
-        3.3.1 Channel id.: <REDACTED - stored in deploy secrets>
-        3.3.2 Channel name: Ittipol@
-        3.3.3 Channel secret: <REDACTED - stored in deploy secrets>
-        3.3.4 Channel access token: <REDACTED - stored in deploy secrets>
-        3.3.5 Webhook URL: https://n8n38-sbu.veya.co.th/webhook/line
-   3.4 Email สำหรับส่งทดสอบ:
-        3.4.1 Email sender: DailyNews
+        3.3.1 Your user ID: Ue25e822f472f9646c5fe76482825567f
+        3.3.2 Channel id.: <REDACTED - stored in deploy secrets>
+        3.3.3 Channel name: Ittipol@
+        3.3.4 Channel secret: <REDACTED - stored in deploy secrets>
+        3.3.5 Channel access token: <REDACTED - stored in deploy secrets>
+        3.3.6 Webhook URL: https://n8n38-sbu.veya.co.th/webhook/line
+    3.4 LINEOA
+        3.4.1 ชื่อบัญชี: DailyNews
+        3.4.2 เบสิค ID: @131ofesf
+        3.4.3 ชื่อโพรไวเดอร์: POL
+        3.4.4 แชนแนล ID: 2010949885
+        3.4.5 ความลับแชนแนล: 8d81847c39110fe9ae59ea6c12c23b9f
+        3.4.6 Webhook URL: https://n8n38-sbu.veya.co.th/webhook/line
+    3.5 Email สำหรับส่งทดสอบ:
+        3.5.1 Email sender: DailyNews
 ============================== End of Requirement Specification ==================================   
       - Email receive address: ittipolint@gmail.com 
    - กรณีที่สร้างสิ่งใดใหม่ให้รายงาน Credential ออกมาให้ทราบด้วย 
