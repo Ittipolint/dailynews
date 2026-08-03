@@ -15,6 +15,7 @@ class Member extends Model
 
     protected $fillable = [
         'member_type_id', 'name', 'email', 'line_user_id', 'line_oa_user_id',
+        'line_oa_basic_id', 'line_oa_channel_id', 'line_oa_channel_secret', 'line_oa_webhook_url',
         'preferred_locale', 'status', 'is_active',
         'plan_start_date', 'plan_end_date',
     ];

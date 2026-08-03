@@ -41,8 +41,24 @@
                             <input type="text" name="line_user_id" class="form-control" value="{{ old('line_user_id', $member->line_user_id) }}">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">LINE OA User ID</label>
-                            <input type="text" name="line_oa_user_id" class="form-control" value="{{ old('line_oa_user_id', $member->line_oa_user_id) }}">
+                            <label class="form-label">LINE OA User ID (ผู้รับ)</label>
+                            <input type="text" name="line_oa_user_id" class="form-control" value="{{ old('line_oa_user_id', $member->line_oa_user_id) }}" placeholder="Uxxxxxx...">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">LINE OA ชื่อบัญชี</label>
+                            <input type="text" name="line_oa_basic_id" class="form-control" value="{{ old('line_oa_basic_id', $member->line_oa_basic_id) }}" placeholder="@dailynews">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">LINE OA Channel ID</label>
+                            <input type="text" name="line_oa_channel_id" class="form-control" value="{{ old('line_oa_channel_id', $member->line_oa_channel_id) }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">LINE OA Channel Secret</label>
+                            <input type="password" name="line_oa_channel_secret" class="form-control" value="{{ old('line_oa_channel_secret', $member->line_oa_channel_secret) }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">LINE OA Webhook URL</label>
+                            <input type="text" name="line_oa_webhook_url" class="form-control" value="{{ old('line_oa_webhook_url', $member->line_oa_webhook_url) }}">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">สถานะสมาชิก</label>

@@ -251,14 +251,7 @@ class DeliveryService
 
     protected function deliverLineOa(Member $member, MemberChannel $channel, iterable $news): int
     {
-        $credentials = $channel->credentials ?? [];
         $userId = $member->line_oa_user_id;
-
-        if (! $userId) {
-            throw new \RuntimeException('LINE OA user_id not set');
-        }
-
-        $token = $this->lineAccessToken();
 
         $messages = [];
         foreach ($news as $item) {
@@ -269,17 +262,54 @@ class DeliveryService
             ];
         }
 
-        $response = Http::withToken($token)
-            ->post('https://api.line.me/v2/bot/message/push', [
-                'to' => $userId,
-                'messages' => array_slice($messages, 0, 5),
-            ]);
+        $payload = 'broadcast';
+        $label = 'broadcast';
+
+        if ($userId) {
+            $endpoint = 'https://api.line.me/v2/bot/message/push';
+            $payload = ['to' => $userId, 'messages' => array_slice($messages, 0, 5)];
+            $label = 'push';
+        } else {
+            // No recipient ID: broadcast to every follower of the LINE OA account.
+            $endpoint = 'https://api.line.me/v2/bot/message/broadcast';
+            $payload = ['messages' => array_slice($messages, 0, 5)];
+        }
+
+        $response = Http::withToken($this->lineOaAccessToken($member))
+            ->post($endpoint, $payload);
 
         if (! $response->successful()) {
-            throw new \RuntimeException("LINE OA push failed: {$response->status()} {$response->body()}");
+            throw new \RuntimeException("LINE OA {$label} failed: {$response->status()} {$response->body()}");
         }
 
         return count($messages);
+    }
+
+    /**
+     * Obtain a LINE OA channel access token. If the member carries its own
+     * OA channel credentials, exchange them for a short-lived token via the
+     * LINE OAuth endpoint; otherwise fall back to the shared channel token.
+     */
+    protected function lineOaAccessToken(Member $member): string
+    {
+        $channelId = $member->line_oa_channel_id;
+        $channelSecret = $member->line_oa_channel_secret;
+
+        if ($channelId && $channelSecret) {
+            $response = Http::asForm()->post('https://api.line.me/v2/oauth/accessToken', [
+                'grant_type' => 'client_credentials',
+                'client_id' => $channelId,
+                'client_secret' => $channelSecret,
+            ]);
+
+            if ($response->successful() && $response->json('access_token')) {
+                return $response->json('access_token');
+            }
+
+            throw new \RuntimeException("LINE OA token exchange failed: {$response->status()} {$response->body()}");
+        }
+
+        return $this->lineAccessToken();
     }
 
     protected function deliverEmail(Member $member, MemberChannel $channel, iterable $news): int
