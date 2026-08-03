@@ -102,6 +102,7 @@ class ProfileController extends Controller
         return view('member.schedules', [
             'member' => $this->resolveMember(),
             'schedules' => $this->resolveMember()?->schedules()->get() ?? collect(),
+            'categories' => Category::where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 

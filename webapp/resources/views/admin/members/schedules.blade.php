@@ -104,8 +104,12 @@
                     </div>
                 </div>
                 <div class="col-md-12">
-                    <label class="form-label">หมวดหมู่ (ไม่ระบุ = ทั้งหมด)</label>
-                    <input type="text" name="categories[]" class="form-control" placeholder="technology, business">
+                    <label class="form-label">หมวดหมู่ <span class="text-secondary fw-normal">(เลือกได้หลายหมวด — ไม่เลือก = ทั้งหมด)</span></label>
+                    <select name="categories[]" id="sch-cats" class="form-select" multiple size="4">
+                        @foreach ($categories as $category)
+                            <option value="{{ $category->code }}">{{ $category->name }}</option>
+                        @endforeach
+                    </select>
                 </div>
                 <div class="col-md-12">
                     <button type="submit" class="btn btn-primary">เพิ่ม</button>

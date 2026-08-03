@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Category;
 use App\Models\Member;
 use App\Models\MemberSchedule;
 use Illuminate\Http\RedirectResponse;
@@ -17,8 +18,9 @@ class MemberScheduleController extends Controller
     public function index(Member $member): View
     {
         $schedules = $member->schedules()->get();
+        $categories = Category::where('is_active', true)->orderBy('name')->get();
 
-        return view('admin.members.schedules', compact('member', 'schedules'));
+        return view('admin.members.schedules', compact('member', 'schedules', 'categories'));
     }
 
     public function store(Request $request, Member $member): RedirectResponse

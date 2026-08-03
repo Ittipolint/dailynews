@@ -85,6 +85,14 @@
                     </div>
                 </div>
                 <div class="col-md-12">
+                    <label class="form-label">หมวดหมู่ <span class="text-secondary fw-normal">(เลือกได้หลายหมวด — ไม่เลือก = ทั้งหมด)</span></label>
+                    <select name="categories[]" class="form-select" multiple size="4">
+                        @foreach ($categories as $category)
+                            <option value="{{ $category->code }}">{{ $category->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-12">
                     <label class="form-label">ช่องทาง *</label>
                     <div class="d-flex gap-3">
                         @foreach (\App\Enums\ChannelType::cases() as $channel)
