@@ -97,7 +97,8 @@
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                 'Accept': 'application/json'
-            }
+            },
+            credentials: 'same-origin'
         })
         .then(r => r.text().then(text => {
             let data = {};
@@ -105,6 +106,11 @@
             return { ok: r.ok, status: r.status, data };
         }))
         .then(({ ok, status, data }) => {
+            if (status === 419) {
+                alert('เซสชันหมดอายุ กรุณาล็อกอินใหม่');
+                window.location.href = '/dailynews/login';
+                return;
+            }
             if (ok) {
                 const stored = (data.body && data.body.stored) ? ('บันทึก ' + data.body.stored + ' ข่าว') : '';
                 alert('ดึงข่าว "' + name + '" เรียบร้อย (HTTP ' + status + ') ' + stored);
@@ -118,7 +124,13 @@
                 alert('ดึงข่าว "' + name + '" ล้มเหลว: ' + reason);
             }
         })
-        .catch(err => alert('ดึงข่าว "' + name + '" ล้มเหลว: ' + err.message))
+        .catch(err => {
+            if (err && err.message === 'Failed to fetch') {
+                alert('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ (Failed to fetch) กรุณาลองใหม่อีกครั้ง หรือล็อกอินใหม่หากเซสชันหมดอายุ');
+            } else {
+                alert('ดึงข่าว "' + name + '" ล้มเหลว: ' + (err && err.message ? err.message : 'ไม่ทราบสาเหตุ'));
+            }
+        })
         .finally(() => {
             btn.disabled = false;
             btn.innerHTML = original;
