@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Member;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\Member;
 use App\Models\MemberChannel;
 use App\Models\MemberInterest;
@@ -65,6 +66,7 @@ class ProfileController extends Controller
         return view('member.interests', [
             'member' => $this->resolveMember(),
             'interests' => $this->resolveMember()?->interests()->get() ?? collect(),
+            'categories' => Category::where('is_active', true)->orderBy('name')->get(),
         ]);
     }
 
@@ -78,6 +80,14 @@ class ProfileController extends Controller
             'type' => ['required', 'in:category,tag,keyword'],
             'value' => ['required', 'string', 'max:255'],
         ]);
+
+        if ($data['type'] === 'category') {
+            $valid = Category::where('is_active', true)
+                ->whereIn('code', [$data['value']])
+                ->exists();
+
+            abort_unless($valid, 422, 'หมวดหมู่ที่เลือกไม่ถูกต้อง');
+        }
 
         MemberInterest::firstOrCreate(
             ['member_id' => $member->id, 'type' => $data['type'], 'value' => $data['value']],

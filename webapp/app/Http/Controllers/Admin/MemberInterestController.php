@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Category;
 use App\Models\Member;
 use App\Models\MemberInterest;
 use Illuminate\Http\RedirectResponse;
@@ -17,8 +18,9 @@ class MemberInterestController extends Controller
     public function index(Member $member): View
     {
         $interests = $member->interests()->get();
+        $categories = Category::where('is_active', true)->orderBy('name')->get();
 
-        return view('admin.members.interests', compact('member', 'interests'));
+        return view('admin.members.interests', compact('member', 'interests', 'categories'));
     }
 
     public function store(Request $request, Member $member): RedirectResponse
@@ -28,6 +30,14 @@ class MemberInterestController extends Controller
             'value' => ['required', 'string', 'max:255'],
             'config' => ['nullable', 'array'],
         ]);
+
+        if ($data['type'] === 'category') {
+            $valid = Category::where('is_active', true)
+                ->whereIn('code', [$data['value']])
+                ->exists();
+
+            abort_unless($valid, 422, 'หมวดหมู่ที่เลือกไม่ถูกต้อง');
+        }
 
         $interest = MemberInterest::firstOrCreate(
             ['member_id' => $member->id, 'type' => $data['type'], 'value' => $data['value']],

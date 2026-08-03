@@ -13,14 +13,20 @@
             @csrf
             <div class="row g-2">
                 <div class="col-md-3">
-                    <select name="type" class="form-select" required>
+                    <select name="type" id="interest-type" class="form-select" required>
                         <option value="category">หมวดหมู่ (Category)</option>
                         <option value="tag">แท็ก (Tag)</option>
                         <option value="keyword">คำค้น (Keyword)</option>
                     </select>
                 </div>
                 <div class="col-md-7">
-                    <input type="text" name="value" class="form-control" placeholder="เช่น technology / AI / เศรษฐกิจ" required>
+                    <select name="value" id="interest-category" class="form-select" required>
+                        <option value="">— เลือกหมวดหมู่ —</option>
+                        @foreach ($categories as $category)
+                            <option value="{{ $category->code }}">{{ $category->name }}</option>
+                        @endforeach
+                    </select>
+                    <input type="text" name="value" id="interest-value" class="form-control d-none" placeholder="เช่น technology / AI / เศรษฐกิจ">
                 </div>
                 <div class="col-md-2">
                     <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>เพิ่ม</button>
@@ -56,3 +62,28 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    const type = document.getElementById('interest-type');
+    const category = document.getElementById('interest-category');
+    const value = document.getElementById('interest-value');
+
+    function sync() {
+        const isCategory = type.value === 'category';
+        category.classList.toggle('d-none', !isCategory);
+        value.classList.toggle('d-none', isCategory);
+        category.disabled = !isCategory;
+        value.disabled = isCategory;
+        category.required = isCategory;
+        value.required = !isCategory;
+        value.value = isCategory ? '' : value.value;
+        category.value = isCategory ? category.value : '';
+    }
+
+    type.addEventListener('change', sync);
+    sync();
+})();
+</script>
+@endpush
