@@ -23,18 +23,11 @@ class MemberScheduleController extends Controller
 
     public function store(Request $request, Member $member): RedirectResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'cron_expression' => ['required', 'string', 'max:100'],
-            'channels' => ['required', 'array'],
-            'channels.*' => ['in:line_personal,line_oa,email'],
-            'categories' => ['nullable', 'array'],
-            'languages' => ['nullable', 'array'],
-            'limit' => ['nullable', 'integer', 'min:1', 'max:50'],
-        ]);
+        $data = $this->validated($request);
 
         $schedule = $member->schedules()->create([
             ...$data,
+            'cron_expression' => $this->cronExpression($request),
             'languages' => $data['languages'] ?? ['th'],
             'limit' => $data['limit'] ?? 10,
             'is_active' => true,
@@ -47,9 +40,29 @@ class MemberScheduleController extends Controller
 
     public function update(Request $request, MemberSchedule $schedule): RedirectResponse
     {
-        $data = $request->validate([
+        $data = $this->validated($request);
+
+        $schedule->update([
+            ...$data,
+            'cron_expression' => $this->cronExpression($request),
+            'is_active' => $request->boolean('is_active', $schedule->is_active),
+        ]);
+
+        AuditLog::record('member_schedule', 'update', (string) $schedule->id);
+
+        return redirect()->route('admin.members.schedules.index', $schedule->member)->with('success', 'แก้ไขตารางเวลาเรียบร้อย');
+    }
+
+    protected function validated(Request $request): array
+    {
+        return $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'cron_expression' => ['required', 'string', 'max:100'],
+            'cron_expression' => ['nullable', 'string', 'max:100'],
+            'freq' => ['nullable', 'in:daily,weekly,monthly'],
+            'sch_time' => ['nullable', 'date_format:H:i'],
+            'sch_dow' => ['nullable', 'array'],
+            'sch_dow.*' => ['in:0,1,2,3,4,5,6'],
+            'sch_dom' => ['nullable', 'string', 'max:2'],
             'channels' => ['required', 'array'],
             'channels.*' => ['in:line_personal,line_oa,email'],
             'categories' => ['nullable', 'array'],
@@ -57,15 +70,30 @@ class MemberScheduleController extends Controller
             'limit' => ['nullable', 'integer', 'min:1', 'max:50'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
+    }
 
-        $schedule->update([
-            ...$data,
-            'is_active' => $request->boolean('is_active', $schedule->is_active),
-        ]);
+    protected function cronExpression(Request $request): string
+    {
+        $freq = $request->input('freq');
 
-        AuditLog::record('member_schedule', 'update', (string) $schedule->id);
+        if (! in_array($freq, ['daily', 'weekly', 'monthly'], true)) {
+            return $request->input('cron_expression', '0 8 * * *');
+        }
 
-        return redirect()->route('admin.members.schedules.index', $schedule->member)->with('success', 'แก้ไขตารางเวลาเรียบร้อย');
+        [$h, $m] = array_pad(explode(':', (string) $request->input('sch_time', '08:00')), 2, '00');
+
+        if ($freq === 'weekly') {
+            $days = collect($request->input('sch_dow', []))->sort()->join(',');
+            $days = $days ?: '*';
+
+            return "{$m} {$h} * * {$days}";
+        }
+
+        if ($freq === 'monthly') {
+            return "{$m} {$h} ".($request->input('sch_dom') ?: '1').' * *';
+        }
+
+        return "{$m} {$h} * * *";
     }
 
     public function destroy(MemberSchedule $schedule): RedirectResponse

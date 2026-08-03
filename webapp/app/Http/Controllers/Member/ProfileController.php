@@ -113,7 +113,12 @@ class ProfileController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'cron_expression' => ['required', 'string', 'max:100'],
+            'cron_expression' => ['nullable', 'string', 'max:100'],
+            'freq' => ['nullable', 'in:daily,weekly,monthly'],
+            'sch_time' => ['nullable', 'date_format:H:i'],
+            'sch_dow' => ['nullable', 'array'],
+            'sch_dow.*' => ['in:0,1,2,3,4,5,6'],
+            'sch_dom' => ['nullable', 'string', 'max:2'],
             'channels' => ['required', 'array'],
             'channels.*' => ['in:line_personal,line_oa,email'],
             'categories' => ['nullable', 'array'],
@@ -123,11 +128,36 @@ class ProfileController extends Controller
 
         $member->schedules()->create([
             ...$data,
+            'cron_expression' => $this->cronExpression($request),
             'languages' => $data['languages'] ?? ['th'],
             'limit' => $data['limit'] ?? 10,
             'is_active' => true,
         ]);
 
         return redirect()->route('member.schedules')->with('success', 'บันทึกตารางเวลาส่งข่าวเรียบร้อย');
+    }
+
+    protected function cronExpression(Request $request): string
+    {
+        $freq = $request->input('freq');
+
+        if (! in_array($freq, ['daily', 'weekly', 'monthly'], true)) {
+            return $request->input('cron_expression', '0 8 * * *');
+        }
+
+        [$h, $m] = array_pad(explode(':', (string) $request->input('sch_time', '08:00')), 2, '00');
+
+        if ($freq === 'weekly') {
+            $days = collect($request->input('sch_dow', []))->sort()->join(',');
+            $days = $days ?: '*';
+
+            return "{$m} {$h} * * {$days}";
+        }
+
+        if ($freq === 'monthly') {
+            return "{$m} {$h} ".($request->input('sch_dom') ?: '1').' * *';
+        }
+
+        return "{$m} {$h} * * *";
     }
 }
