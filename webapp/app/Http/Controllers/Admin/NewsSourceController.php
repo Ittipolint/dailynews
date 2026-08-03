@@ -126,7 +126,12 @@ class NewsSourceController extends Controller
         ];
 
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(30)
+            // Keep the wait short: the n8n webhook is responseMode=onReceived
+            // so it acknowledges almost instantly. A short timeout guarantees
+            // PHP returns before shared-hosting limits can kill the request
+            // (which surfaces in the browser as "Failed to fetch").
+            $response = \Illuminate\Support\Facades\Http::connectTimeout(3)
+                ->timeout(10)
                 ->withHeaders([
                     'X-API-Token' => (string) config('services.api_token'),
                     'Accept' => 'application/json',
