@@ -54,7 +54,10 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">LINE OA Channel Secret</label>
-                            <input type="password" name="line_oa_channel_secret" class="form-control" value="{{ old('line_oa_channel_secret', $member->line_oa_channel_secret) }}">
+                            <div class="input-group">
+                                <input type="password" name="line_oa_channel_secret" class="form-control pw-field" value="{{ $member->exists ? '••••••••••••' : '' }}" placeholder="{{ $member->exists ? 'เว้นว่างไว้เพื่อเก็บค่าเดิม' : '8d81847c...' }}" autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary pw-toggle" tabindex="-1" aria-label="แสดง/ซ่อน Channel Secret"><i class="bi bi-eye"></i></button>
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">LINE OA Webhook URL</label>
@@ -86,3 +89,17 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.querySelectorAll('.pw-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var input = btn.closest('.input-group').querySelector('.pw-field');
+        if (!input) return;
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.innerHTML = show ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+    });
+});
+</script>
+@endpush

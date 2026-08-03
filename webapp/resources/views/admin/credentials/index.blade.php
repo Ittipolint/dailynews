@@ -24,7 +24,10 @@
                         @foreach (($credential->config ?? []) as $key => $value)
                             <div class="mb-2">
                                 <label class="form-label small text-secondary">{{ $key }}</label>
-                                <input type="password" name="config[{{ $key }}]" class="form-control form-control-sm" placeholder="••••••••••••" autocomplete="off">
+                                <div class="input-group input-group-sm">
+                                    <input type="password" name="config[{{ $key }}]" class="form-control pw-field" placeholder="••••••••••••" autocomplete="off">
+                                    <button type="button" class="btn btn-outline-secondary pw-toggle" tabindex="-1" aria-label="แสดง/ซ่อนค่า"><i class="bi bi-eye"></i></button>
+                                </div>
                                 <div class="form-text">เว้นว่างไว้เพื่อเก็บค่าเดิม</div>
                             </div>
                         @endforeach
@@ -45,3 +48,17 @@
     @endforelse
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.querySelectorAll('.pw-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var input = btn.closest('.input-group').querySelector('.pw-field');
+        if (!input) return;
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.innerHTML = show ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+    });
+});
+</script>
+@endpush

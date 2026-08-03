@@ -84,6 +84,13 @@ class MemberController extends Controller
         ]);
 
         $old = $member->only(array_keys($data));
+
+        // Keep the existing channel secret when the field is left blank
+        // (the form renders it masked as dots, not as a plaintext value).
+        if (($data['line_oa_channel_secret'] ?? '') === '') {
+            $data['line_oa_channel_secret'] = $member->line_oa_channel_secret;
+        }
+
         $member->update([...$data, 'is_active' => $request->boolean('is_active', true)]);
 
         AuditLog::record('member', 'update', (string) $member->id, $old, $data);
