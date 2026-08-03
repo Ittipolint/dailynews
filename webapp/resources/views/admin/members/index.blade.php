@@ -43,6 +43,12 @@
                             <a href="{{ route('admin.members.schedules.index', $member) }}">ตารางเวลา</a>
                         </td>
                         <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-outline-success send-news-btn"
+                                data-url="{{ route('admin.members.send-news', $member) }}"
+                                data-name="{{ $member->name }}"
+                                title="ส่งข่าวล็อตล่าสุดให้สมาชิกทันที">
+                                <i class="bi bi-send-fill"></i> ส่งข่าว
+                            </button>
                             <a href="{{ route('admin.members.edit', $member) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
                             <form action="{{ route('admin.members.toggle', $member) }}" method="POST" class="d-inline">
                                 @csrf @method('PATCH')
@@ -65,3 +71,52 @@
 </div>
 <div class="mt-3">{{ $members->links() }}</div>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.send-news-btn');
+        if (!btn) return;
+
+        const url = btn.dataset.url;
+        const name = btn.dataset.name;
+        const original = btn.innerHTML;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> ส่งข่าว...';
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'Accept': 'application/json'
+            }
+        })
+        .then(r => r.text().then(text => {
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { raw: text }; }
+            return { ok: r.ok, status: r.status, data };
+        }))
+        .then(({ ok, status, data }) => {
+            if (ok) {
+                alert('ส่งข่าว "' + name + '" เรียบร้อย (HTTP ' + status + ') จำนวน ' + data.news_count + ' ข่าว ไปยัง ' + (data.channels || []).join(', '));
+            } else {
+                let reason = data.error || (data.body && data.body.error) || data.raw || '';
+                if (!reason) {
+                    reason = status === 502
+                        ? 'เซิร์ฟเวอร์ไม่ตอบสนอง กรุณาลองใหม่'
+                        : 'HTTP ' + status;
+                }
+                alert('ส่งข่าว "' + name + '" ล้มเหลว: ' + reason);
+            }
+        })
+        .catch(err => alert('ส่งข่าว "' + name + '" ล้มเหลว: ' + err.message))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        });
+    });
+})();
+</script>
+@endpush

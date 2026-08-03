@@ -24,7 +24,7 @@ class DeliveryService
         $news = $this->collectNews($schedule);
 
         if ($news->isEmpty()) {
-            $this->recordLog($schedule, null, 'success', [], null);
+            $this->recordLog($schedule->member, null, 'success', [], null, $schedule->id);
 
             return ['delivered' => 0, 'reason' => 'no matching news'];
         }
@@ -44,10 +44,10 @@ class DeliveryService
 
             try {
                 $sent = $this->deliver($schedule->member, $memberChannel, $news);
-                $this->recordLog($schedule, $memberChannel, 'success', $news->pluck('id')->all(), null);
+                $this->recordLog($schedule->member, $memberChannel, 'success', $news->pluck('id')->all(), null, $schedule->id);
                 $results[$channelType] = ['status' => 'success', 'sent' => $sent];
             } catch (\Throwable $e) {
-                $this->recordLog($schedule, $memberChannel, 'failed', $news->pluck('id')->all(), $e->getMessage());
+                $this->recordLog($schedule->member, $memberChannel, 'failed', $news->pluck('id')->all(), $e->getMessage(), $schedule->id);
                 $results[$channelType] = ['status' => 'failed', 'error' => $e->getMessage()];
                 Log::channel('delivery')->error('Delivery failed', [
                     'schedule' => $schedule->id,
@@ -72,6 +72,65 @@ class DeliveryService
             });
 
         return $results;
+    }
+
+    /**
+     * Send the most recently ingested news lot to every active channel
+     * of the given member, immediately (admin "send news" button).
+     */
+    public function deliverLatestLot(Member $member, int $limit = 5): array
+    {
+        if (! $member->is_active) {
+            return ['ok' => false, 'error' => 'member inactive'];
+        }
+
+        $latestFetchedAt = News::max('fetched_at');
+
+        if (! $latestFetchedAt) {
+            return ['ok' => false, 'error' => 'no news in system'];
+        }
+
+        $news = News::where('fetched_at', '>=', \Carbon\Carbon::parse($latestFetchedAt)->subMinutes(10))
+            ->orderByDesc('published_at')
+            ->limit($limit)
+            ->get();
+
+        if ($news->isEmpty()) {
+            return ['ok' => false, 'error' => 'latest lot is empty'];
+        }
+
+        $channels = $member->channels()
+            ->where('is_active', true)
+            ->get();
+
+        if ($channels->isEmpty()) {
+            return ['ok' => false, 'error' => 'no active channels'];
+        }
+
+        $results = [];
+
+        foreach ($channels as $channel) {
+            try {
+                $sent = $this->deliver($member, $channel, $news);
+                $this->recordLog($member, $channel, 'success', $news->pluck('id')->all(), null);
+                $results[$channel->channel_type] = ['status' => 'success', 'sent' => $sent];
+            } catch (\Throwable $e) {
+                $this->recordLog($member, $channel, 'failed', $news->pluck('id')->all(), $e->getMessage());
+                $results[$channel->channel_type] = ['status' => 'failed', 'error' => $e->getMessage()];
+                Log::channel('delivery')->error('Deliver latest lot failed', [
+                    'member' => $member->id,
+                    'channel' => $channel->channel_type,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return [
+            'ok' => true,
+            'news_count' => $news->count(),
+            'channels' => array_keys($results),
+            'results' => $results,
+        ];
     }
 
     protected function collectNews(MemberSchedule $schedule)
@@ -216,11 +275,11 @@ class DeliveryService
         return config('services.line.access_token', '');
     }
 
-    protected function recordLog(MemberSchedule $schedule, ?MemberChannel $channel, string $status, array $newsIds, ?string $error): void
+    protected function recordLog(Member $member, ?MemberChannel $channel, string $status, array $newsIds, ?string $error, ?int $scheduleId = null): void
     {
         DeliveryLog::create([
-            'member_id' => $schedule->member_id,
-            'schedule_id' => $schedule->id,
+            'member_id' => $member->id,
+            'schedule_id' => $scheduleId,
             'channel_type' => $channel?->channel_type ?? 'none',
             'news_ids' => $newsIds,
             'status' => $status,

@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Member;
 use App\Models\MemberType;
+use App\Services\Delivery\DeliveryService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -94,5 +96,30 @@ class MemberController extends Controller
         $member->update(['is_active' => ! $member->is_active]);
 
         return redirect()->route('admin.members.index')->with('success', 'เปลี่ยนสถานะเรียบร้อย');
+    }
+
+    public function sendNews(Member $member): JsonResponse
+    {
+        if (! $member->is_active) {
+            return response()->json(['ok' => false, 'error' => 'สมาชิกนี้ถูกปิดใช้งาน'], 422);
+        }
+
+        $result = app(DeliveryService::class)->deliverLatestLot($member, 5);
+
+        if (! ($result['ok'] ?? false)) {
+            return response()->json(['ok' => false, 'error' => $result['error'] ?? 'ส่งข่าวไม่สำเร็จ'], 422);
+        }
+
+        AuditLog::record('member', 'send_news', (string) $member->id, null, [
+            'channels' => $result['channels'],
+            'news_count' => $result['news_count'],
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'news_count' => $result['news_count'],
+            'channels' => $result['channels'],
+            'results' => $result['results'],
+        ]);
     }
 }

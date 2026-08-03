@@ -46,6 +46,8 @@ Route::middleware('auth')->group(function (): void {
             ->except(['show']);
         Route::patch('members/{member}/toggle', [\App\Http\Controllers\Admin\MemberController::class, 'toggle'])
             ->name('members.toggle');
+        Route::post('members/{member}/send-news', [\App\Http\Controllers\Admin\MemberController::class, 'sendNews'])
+            ->name('members.send-news');
 
         // Member channels / interests / schedules
         Route::get('members/{member}/channels', [\App\Http\Controllers\Admin\MemberChannelController::class, 'index'])
