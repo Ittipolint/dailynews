@@ -34,6 +34,12 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        //
+        // Force https for generated URLs on production. The site is served
+        // behind Cloudflare which does not forward X-Forwarded-Proto, so
+        // Laravel would otherwise emit http:// URLs -> mixed-content errors
+        // ("Failed to fetch") in the browser.
+        if (app()->environment('production') && str_starts_with(config('app.url'), 'https://')) {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
     }
 }

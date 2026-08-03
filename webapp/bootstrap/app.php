@@ -14,6 +14,18 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Cloudflare front-end proxy: trust X-Forwarded-Proto so Laravel
+        // generates https URLs (fixes mixed-content "Failed to fetch" when
+        // route()/url() returned http:// under the https origin).
+        $middleware->trustProxies(
+            at: ['*'],
+            headers: \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR
+                | \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST
+                | \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT
+                | \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO
+                | \Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB
+        );
+
         $middleware->validateCsrfTokens(except: ['setup/*']);
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
