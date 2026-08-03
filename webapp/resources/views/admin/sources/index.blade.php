@@ -99,12 +99,23 @@
                 'Accept': 'application/json'
             }
         })
-        .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, data })))
-        .then(({ ok, data }) => {
+        .then(r => r.text().then(text => {
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { raw: text }; }
+            return { ok: r.ok, status: r.status, data };
+        }))
+        .then(({ ok, status, data }) => {
             if (ok) {
-                alert('ดึงข่าว "' + name + '" เรียบร้อย (HTTP ' + data.status + ')');
+                const stored = (data.body && data.body.stored) ? ('บันทึก ' + data.body.stored + ' ข่าว') : '';
+                alert('ดึงข่าว "' + name + '" เรียบร้อย (HTTP ' + status + ') ' + stored);
             } else {
-                alert('ดึงข่าว "' + name + '" ล้มเหลว: ' + (data.error || data.body?.error || 'HTTP ' + data.status));
+                let reason = data.error || (data.body && data.body.error) || data.raw || '';
+                if (!reason) {
+                    reason = status === 502
+                        ? 'n8n webhook ไม่ตอบสนอง (อาจยังไม่ได้เปิดใช้งาน workflow)'
+                        : 'HTTP ' + status;
+                }
+                alert('ดึงข่าว "' + name + '" ล้มเหลว: ' + reason);
             }
         })
         .catch(err => alert('ดึงข่าว "' + name + '" ล้มเหลว: ' + err.message))
