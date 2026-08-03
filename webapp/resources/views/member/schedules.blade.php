@@ -122,22 +122,40 @@
     <div class="table-responsive">
         <table class="table align-middle mb-0">
             <thead class="table-light">
-                <tr><th>ชื่อ</th><th>Cron</th><th>ช่องทาง</th><th>สถานะ</th></tr>
+                <tr><th>ชื่อ</th><th>ตารางเวลา</th><th>ช่องทาง</th><th>ทำงานล่าสุด</th><th>สถานะ</th></tr>
             </thead>
             <tbody>
                 @forelse ($schedules as $schedule)
+                    @php
+                        $lastLog = $schedule->deliveryLogs->first();
+                        $lastOk = $lastLog && $lastLog->status === 'success';
+                        $lastFailed = $lastLog && $lastLog->status === 'failed';
+                    @endphp
                     <tr>
-                        <td><strong>{{ $schedule->name }}</strong></td>
-                        <td><code>{{ $schedule->cron_expression }}</code></td>
+                        <td>
+                            <strong>{{ $schedule->name }}</strong>
+                            <div class="small text-secondary"><code>{{ $schedule->cron_expression }}</code></div>
+                        </td>
+                        <td>{{ $schedule->humanSchedule() }}</td>
                         <td>
                             @foreach ($schedule->channels ?? [] as $ch)
                                 <span class="badge bg-info">{{ $ch }}</span>
                             @endforeach
                         </td>
+                        <td>
+                            @if ($lastLog)
+                                <span class="badge {{ $lastOk ? 'bg-success' : ($lastFailed ? 'bg-danger' : 'bg-secondary') }}">
+                                    {{ $lastOk ? 'สำเร็จ' : ($lastFailed ? 'ล้มเหลว' : $lastLog->status) }}
+                                </span>
+                                <div class="small text-secondary">{{ $lastLog->sent_at?->diffForHumans() ?? '-' }}</div>
+                            @else
+                                <span class="text-secondary small">ยังไม่เคยทำงาน</span>
+                            @endif
+                        </td>
                         <td><span class="badge {{ $schedule->is_active ? 'bg-success' : 'bg-secondary' }}">{{ $schedule->is_active ? 'Active' : 'Inactive' }}</span></td>
                     </tr>
                 @empty
-                    <tr><td colspan="4" class="text-center text-secondary py-4">ยังไม่มีตารางเวลา</td></tr>
+                    <tr><td colspan="5" class="text-center text-secondary py-4">ยังไม่มีตารางเวลา</td></tr>
                 @endforelse
             </tbody>
         </table>

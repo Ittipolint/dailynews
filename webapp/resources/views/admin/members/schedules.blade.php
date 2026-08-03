@@ -130,19 +130,48 @@
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
-                <tr><th>ชื่อ</th><th>Cron</th><th>ช่องทาง</th><th>หมวดหมู่</th><th>สถานะ</th><th class="text-end">จัดการ</th></tr>
+                <tr>
+                    <th>ชื่อ</th>
+                    <th>ตารางเวลา</th>
+                    <th>ช่องทาง</th>
+                    <th>หมวดหมู่</th>
+                    <th>ทำงานล่าสุด</th>
+                    <th>สถานะ</th>
+                    <th class="text-end">จัดการ</th>
+                </tr>
             </thead>
             <tbody>
                 @forelse ($schedules as $schedule)
+                    @php
+                        $lastLog = $schedule->deliveryLogs->first();
+                        $lastOk = $lastLog && $lastLog->status === 'success';
+                        $lastFailed = $lastLog && $lastLog->status === 'failed';
+                    @endphp
                     <tr>
-                        <td><strong>{{ $schedule->name }}</strong></td>
-                        <td><code>{{ $schedule->cron_expression }}</code></td>
+                        <td>
+                            <strong>{{ $schedule->name }}</strong>
+                            <div class="small text-secondary"><code>{{ $schedule->cron_expression }}</code></div>
+                        </td>
+                        <td>{{ $schedule->humanSchedule() }}</td>
                         <td>
                             @foreach ($schedule->channels ?? [] as $ch)
                                 <span class="badge bg-info">{{ $ch }}</span>
                             @endforeach
                         </td>
                         <td class="small">{{ implode(', ', $schedule->categories ?? []) ?: '-' }}</td>
+                        <td>
+                            @if ($lastLog)
+                                <span class="badge {{ $lastOk ? 'bg-success' : ($lastFailed ? 'bg-danger' : 'bg-secondary') }}">
+                                    {{ $lastOk ? 'สำเร็จ' : ($lastFailed ? 'ล้มเหลว' : $lastLog->status) }}
+                                </span>
+                                <div class="small text-secondary">{{ $lastLog->sent_at?->diffForHumans() ?? '-' }}</div>
+                                @if ($lastLog->error_message)
+                                    <div class="small text-danger" title="{{ $lastLog->error_message }}">{{ \Illuminate\Support\Str::limit($lastLog->error_message, 30) }}</div>
+                                @endif
+                            @else
+                                <span class="text-secondary small">ยังไม่เคยทำงาน</span>
+                            @endif
+                        </td>
                         <td><span class="badge {{ $schedule->is_active ? 'bg-success' : 'bg-secondary' }}">{{ $schedule->is_active ? 'Active' : 'Inactive' }}</span></td>
                         <td class="text-end">
                             <form action="{{ route('admin.members.schedules.destroy', $schedule) }}" method="POST" class="d-inline" onsubmit="return confirm('ลบตารางเวลานี้?')">
@@ -152,7 +181,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="text-center text-secondary py-4">ยังไม่มีตารางเวลา</td></tr>
+                    <tr><td colspan="7" class="text-center text-secondary py-4">ยังไม่มีตารางเวลา</td></tr>
                 @endforelse
             </tbody>
         </table>

@@ -17,6 +17,7 @@ Route::prefix('v1')->middleware('api.token')->group(function (): void {
     Route::get('sources', [\App\Http\Controllers\Api\SourceApiController::class, 'index']);
 
     Route::get('schedules/due', [\App\Http\Controllers\Api\DeliveryApiController::class, 'dueSchedules']);
+    Route::post('deliver', [\App\Http\Controllers\Api\DeliveryApiController::class, 'run']);
     Route::get('deliveries', [\App\Http\Controllers\Api\DeliveryApiController::class, 'index']);
     Route::post('deliveries', [\App\Http\Controllers\Api\DeliveryApiController::class, 'record']);
 });

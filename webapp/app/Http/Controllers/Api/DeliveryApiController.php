@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DeliveryLog;
 use App\Models\MemberSchedule;
+use App\Services\Delivery\DeliveryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -35,6 +36,20 @@ class DeliveryApiController extends Controller
 
         return response()->json([
             'data' => $query->orderByDesc('sent_at')->limit((int) ($request->get('limit', 50)))->get(),
+        ]);
+    }
+
+    /**
+     * Trigger delivery for every due member schedule. Called by the n8n
+     * cron workflow each minute; returns which schedules were processed.
+     */
+    public function run(DeliveryService $delivery): JsonResponse
+    {
+        $results = $delivery->processAllDueSchedules();
+
+        return response()->json([
+            'processed' => count($results),
+            'data' => $results,
         ]);
     }
 

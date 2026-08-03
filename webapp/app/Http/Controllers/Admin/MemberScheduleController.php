@@ -17,7 +17,9 @@ class MemberScheduleController extends Controller
 {
     public function index(Member $member): View
     {
-        $schedules = $member->schedules()->get();
+        $schedules = $member->schedules()
+            ->with(['deliveryLogs' => fn ($q) => $q->orderByDesc('sent_at')])
+            ->get();
         $categories = Category::where('is_active', true)->orderBy('name')->get();
 
         return view('admin.members.schedules', compact('member', 'schedules', 'categories'));

@@ -70,11 +70,36 @@ class DeliveryService
         MemberSchedule::where('is_active', true)
             ->whereHas('member', fn ($q) => $q->where('is_active', true))
             ->get()
+            ->filter(function (MemberSchedule $schedule): bool {
+                return $this->isDue($schedule);
+            })
             ->each(function (MemberSchedule $schedule) use (&$results): void {
                 $results[$schedule->id] = $this->processSchedule($schedule);
             });
 
         return $results;
+    }
+
+    /**
+     * Determine whether the schedule's cron expression matches the current
+     * minute/hour/day (Asia/Bangkok), using the same expression parser that
+     * Laravel's scheduler uses.
+     */
+    protected function isDue(MemberSchedule $schedule): bool
+    {
+        $expression = trim((string) $schedule->cron_expression);
+
+        if ($expression === '') {
+            return true;
+        }
+
+        try {
+            return \Cron\CronExpression::factory($expression)
+                ->isDue(new \DateTimeImmutable('now', new \DateTimeZone('Asia/Bangkok')));
+        } catch (\Throwable $e) {
+            // Unparsable cron -> treat as due so it still runs rather than silently never firing.
+            return true;
+        }
     }
 
     /**
