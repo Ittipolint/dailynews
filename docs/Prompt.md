@@ -47,7 +47,7 @@
         3.1.1 https://ittipolint-sbu.veya.co.th  โดยให้สร้าง sub ใหม่ชื่อ /dailynews
         3.1.2 FTP IP: 119.59.116.53
                  User: ittipolint
-                 Pass: <REDACTED - stored in deploy secrets>
+                 Pass: 10203040 (no need to hide)
         3.1.3 Database name: ittipolint_dailynews
                  User: ittipolint_dailynews
                  Pass: <REDACTED - stored in deploy secrets>
