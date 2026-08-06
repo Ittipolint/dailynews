@@ -1,9 +1,11 @@
 # Software Specification — ระบบ DailyNews
 
-**เวอร์ชัน:** 1.1
-**วันที่:** 3 สิงหาคม 2026
+**เวอร์ชัน:** 1.2
+**วันที่:** 6 สิงหาคม 2026
 **ผู้จัดทำ:** ทีมออกแบบระบบ IT (ตามเอกสาร Requirement Specification)
-**สถานะ:** อนุมัติเพื่อใช้เป็นแนวทางพัฒนา
+**สถานะ:** อนุมัติเพื่อใช้เป็นแนวทางพัฒนา (ปรับปรุงให้ตรงกับระบบที่พัฒนาจริง/Production)
+
+> **หมายเหตุฉบับ 1.2:** เอกสารนี้ปรับปรุงจาก 1.1 (3 ส.ค. 2026) ให้ตรงกับสถานะระบบจริงใน Production ณ วันที่ 6 ส.ค. 2026 โดยแก้ไขส่วนที่เคยระบุแบบในอุดมคติ (PostgreSQL main DB, Neo4j Graph, pgvector, Redis, Metabase, Docker ใน Production, translation/delivery ผ่าน n8n) ให้เป็นสถานะที่ทำงานจริง ดูหัวข้อ [3. เทคโนโลยีที่ใช้](#3-เทคโนโลยีที่ใช้-technology-stack) [4. สถาปัตยกรรม](#4-สถาปัตยกรรมระบบ-system-architecture) และ [ส่วน n8n / Docker](#ระบบ-background-workflow-n8n) สำหรับรายละเอียด
 
 ---
 
@@ -38,60 +40,62 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 ### 2.1 Feature การรับข่าวเข้าสู่ระบบ (News Ingestion — Background Job)
 
 #### 2.1.1 รวบรวมข่าวจากแหล่งข่าวสำคัญทั่วโลก
-- ระบบต้องสามารถดึงข่าวจากแหล่งข่าวสำคัญระดับโลกได้เบื้องต้น อย่างน้อยดังนี้:
+- ระบบดึงข่าวจากแหล่งข่าวระดับโลกผ่าน 3 กลไก: **RSS** (`rss`), **API** (`api`), และ **Web Crawling** (`crawl`) ตามค่า `fetch_type` ของแหล่งข่าว
+- แหล่งข่าวที่ seed ไว้ในระบบ (ตาม `NewsSourcesSeeder`) มี 14 รายการ:
   - **AP News** (RSS) — https://apnews.com/
-  - **Reuters** (RSS) — https://www.reuters.com/
   - **BBC News** (RSS) — https://www.bbc.com/news
   - **CNN** (RSS) — https://edition.cnn.com/
-  - **The New York Times** (RSS/API) — https://www.nytimes.com/
   - **Al Jazeera** (RSS) — https://www.aljazeera.com/
-  - **Xinhua (ซินหัว)** (RSS) — http://www.xinhuanet.com/
-  - **CCTV / China Daily** (RSS) — https://www.chinadaily.com.cn/
-  - **สำนักข่าวไทย (TNA)** — https://www.tnamcot.com/
-  - **Thai PBS** — https://www.thaipbs.or.th/
-  - **The Nation / Bangkok Post** — https://www.bangkokpost.com/
-- แหล่งข่าวเริ่มต้นให้ import เข้าระบบ (seed data) ผ่าน Reference Data
-- แต่ละแหล่งข่าวต้องกำหนด: ชื่อ, ภาษา (Locale), ประเภทการดึงข้อมูล (RSS/API/Web Crawling), URL, สถานะ Active/Inactive, Credential (ถ้ามี), ความถี่ในการดึง
+  - **The Guardian** (RSS) — https://www.theguardian.com/
+  - **The New York Times** (RSS) — https://www.nytimes.com/
+  - **Xinhua (ซินหัว)** (RSS) — http://www.xinhuanet.com/english/
+  - **China Daily** (RSS) — https://www.chinadaily.com.cn/
+  - **Reuters** (RSS ผ่าน Google News RSS) — https://www.reuters.com/
+  - **Investing.com** (RSS) — https://www.investing.com/
+  - **Thai PBS** (RSS) — https://www.thaipbs.or.th/
+  - **Bangkok Post** (RSS) — https://www.bangkokpost.com/
+  - **MGR Online** (RSS) — https://mgronline.com/
+  - **TechCrunch** (Web Crawling ด้วย CSS selectors) — https://techcrunch.com/
+- หมายเหตุ: แหล่งข่าว seed ทั้งหมดมี `is_active = true` แต่ Admin สลับเป็น Inactive ได้; ใน Production ณ ส.ค. 2026 มีแหล่งข่าว active จริงเพียง 3 รายการ (Bangkok Post RSS, Bloomberg Technology API demo, Thai PBS) ขึ้นกับข้อมูลปัจจุบันในตาราง `news_sources`
+- แต่ละแหล่งข่าวเก็บ: ชื่อ, slug (unique), ภาษา (locale), fetch_type (rss/api/crawl), feed_url, cron_expression, config (เช่น CSS selectors ของ crawl), credentials (json), สถานะ Active/Inactive, last_fetched_at, last_status, last_error
 
 #### 2.1.2 หน้าจอจัดการแหล่งข่าว (News Source Management)
-- เพิ่มแหล่งข่าวใหม่
-- แก้ไขแหล่งข่าว
-- ลบแหล่งข่าว (soft delete)
-- ตั้งค่า Active / Inactive
-- กำหนดรูปแบบการดึงข่าว (RSS / API / Web Crawling)
-- จัดการ Credential ของแหล่งข่าว (เช่น API Key) เก็บแบบเข้ารหัส
-- ดูประวัติการดึงข่าวล่าสุดของแต่ละแหล่ง (last fetched, status, error)
-- **ปุ่ม "ดึงข่าวทันที" (Fetch Now)** — Admin กดปุ่มในแต่ละแถวแหล่งข่าวเพื่อเรียก n8n webhook ให้ดึงข่าวจากแหล่งนั้นทันที โดยไม่ต้องรอรอบ scheduled job
-  - Web App (Laravel) ส่ง `POST` ไปยัง n8n webhook พร้อมข้อมูลของแหล่งข่าว (`slug, name, url, feed_url, fetch_type, locale`) และใช้ API Token ใน header เพื่อยืนยันตัวตน
-  - n8n workflow ตรวจสอบ `fetch_type`: ถ้าเป็น `rss` → fetch + parse feed โดยตรง, ถ้าเป็น `api` → เรียก API แล้ว normalize ข้อมูล
-  - ข้อมูลที่ได้จะถูกส่งกลับไปที่ `POST /dailynews/api/ingest/push` เพื่อบันทึกลงฐานข้อมูล (deduplicate เหมือน ingestion ปกติ)
-  - ระบบอัปเดต `last_fetched_at`, `last_status` (success/failed) และ `last_error` ของแหล่งข่าวให้ทันที
-  - หาก webhook ไม่ได้ถูก activate ใน n8n จะแสดง error 502 พร้อมข้อความแจ้งเตือน
+- เพิ่ม / แก้ไข / ลบ (soft delete) / ตั้งค่า Active-Inactive แหล่งข่าว
+- กำหนดรูปแบบการดึงข่าว (RSS / API / Web Crawling) และ URL/feed_url
+- จัดการ Credential ของแหล่งข่าว (เช่น API key) เก็บแบบเข้ารหัส (CREDENTIAL_ENCRYPTION_KEY)
+- ปุ่ม "ทดสอบ" (Test Connection) ต่อแหล่งข่าว
+- **ปุ่ม "ดึงข่าวทันที" (Fetch Now)** — Admin กดปุ่มในแต่ละแถวเพื่อเรียก n8n webhook `POST /webhook/dailynews-fetch-now` ให้ดึงข่าวจากแหล่งนั้นทันที
+  - Laravel ส่ง `POST` ไปยัง n8n webhook พร้อมข้อมูลแหล่งข่าว (`slug, name, url, feed_url, fetch_type, locale`) โดยใช้ `httpHeaderAuth` (DailyNews API Token)
+  - n8n workflow (active ใน prod) ตรวจ `fetch_type`: `rss` → parse feed ตรง; `api` → เรียก API แล้ว normalize; แล้วส่งกลับ `POST /dailynews/api/ingest/push` เพื่อบันทึก/เด็ดซ้ำ
+  - ระบบอัปเดต `last_fetched_at`, `last_status`, `last_error` ทันที
+  - หาก webhook ถูกปิดใน n8n จะแสดง error 502/ข้อความแจ้งเตือน
 
 #### 2.1.3 เก็บข้อมูลข่าวลงฐานข้อมูล
-- เมื่อ n8n ดึงข่าวได้แล้วต้อง mapping ข้อมูลให้เป็นโครงสร้างมาตรฐาน แล้วบันทึกลงฐานข้อมูล Postgres
-- ต้องมีการ Deduplication / Normalization เพื่อไม่ให้ข่าวซ้ำ (อ้างอิงจาก URL + hash ของ headline)
-- ข้อมูลข่าวต้องเก็บ: title, summary, body/content, source, category, tags, published_at, fetched_at, language ต้นทาง, url, thumbnail
-- รองรับการดึงแบบ incremental (เฉพาะข่าวใหม่) และการ re-fetch กรณีผิดพลาด (retry)
-- n8n จะต้องทำงานอยู่ตลอดเวลาตามค่าที่ setup ไว้, โดยเริ่มต้นให้ทำงานทุก 1 ชั่วโมง
+- **ฐานข้อมูลเดียว: MySQL/MariaDB** (`ittipolint_dailynews`) — ตาม `DB_CONNECTION=mysql` ใน .env Production (ไม่ใช้ PostgreSQL สำหรับข้อมูลหลัก)
+- n8n ดึงข่าวแล้ว push มาที่ `POST /api/ingest/push` หรือ Laravel เรียก `dailynews:ingest` → `IngestionService` mapping เป็นโครงสร้างมาตรฐานแล้วบันทึก
+- **Deduplication** อ้างอิงจาก `source_url` (unique) + `content_hash` (indexed)
+- ข้อมูลข่าวเก็บ: title, summary, body, source_id, category, tags (json), thumbnail, lang, sentiment, is_breaking, published_at, fetched_at, source_url
+- การดึงเป็นแบบ incremental (เฉพาะรายการใหม่); รองรับ retry เมื่อเกิดข้อผิดพลาด
+- กลไกการดึง: **Laravel scheduled job `dailynews:ingest` (ทุก 1 ชั่วโมง)** เป็นตัวหลัก; n8n ingest workflow มีใน repo แต่ถูกตั้งเป็น inactive ใน prod
 
 #### 2.1.4 การแปลข่าวเป็น 3 ภาษาหลัก
-- ระบบต้องแปลข่าวจากภาษาต้นทางเป็น:
-  - ภาษาไทย (th)
-  - ภาษาอังกฤษ (en)
-  - ภาษาจีน (zh)
-- กลไกการแปล: ใช้ Translation Engine (เลือก opensource หรือ API แปลภาษา) ทำงานเป็น background job ภายหลังการดึงข่าว
-- เก็บข้อความแปลไว้ในตาราง news_translations แยกตาม locale เพื่อให้ใช้งานร่วมกับระบบค้นหาและ Graph RAG
-- ควรเก็บสถานะการแปล (pending / translated / failed) เพื่อให้สามารถ re-run ได้
+- ระบบแปลข่าวจากภาษาต้นทางเป็นไทย (th), อังกฤษ (en), จีน (zh)
+- กลไกการแปล: **TranslationService (Google Gemini LLM, model `gemini-2.5-flash`)** ทำงานเป็น background job หลังการดึงข่าว
+- **การทำงานจริง: Laravel scheduled job `dailynews:translate` (ทุก 1 ชั่วโมง, `--limit=20`)** เป็นตัวดำเนินการหลัก; n8n translate workflow มีใน repo แต่ inactive (ทำหน้าที่ health check เท่านั้น)
+- เก็บข้อความแปลในตาราง `news_translations` แยกตาม locale; unique(news_id, locale)
+- สถานะการแปล (pending/translated/failed) เก็บใน `news_translations.status` + `error_message` เพื่อ re-run ได้
+- รองรับ batch translation (TRANSLATION_BATCH_SIZE=5) และ retry (TRANSLATION_RETRY_ATTEMPTS=3) + backoff
+- **ข้อจำกัด (พบจริง)**: Gemini free tier quota จำกัด 20 request/model/วัน → เมื่อหมด quota การแปลจะ "ข้ามแล้วใช้ต้นฉบับ" (translate-on-delivery fallback) หรือ fail แล้วรอ retry รอบถัดไป
 
 #### 2.1.5 หน้าจอ Chat สำหรับค้นหาข่าวย้อนหลัง (AI Graph RAG)
-- มีหน้าจอ Chat ให้ผู้ใช้งาน (Admin / สมาชิกตามสิทธิ์) ค้นหาข่าวย้อนหลังด้วยภาษาธรรมชาติ
-- ระบบใช้แนวทาง **Graph RAG**:
-  - ข่าวแต่ละเรื่องและเอนทิตี (บุคคล องค์กร สถานที่ หัวข้อ) แทนเป็น nodes ใน Graph
-  - ความสัมพันธ์ระหว่างข่าว/เอนทิตีแทนเป็น edges
-  - ใช้ Vector Embedding เก็บความหมายของข้อความข่าวในแต่ละภาษา (th/en/zh) สำหรับ semantic search
-  - คำตอบจาก LLM อ้างอิง (cite) แหล่งข่าวที่เกี่ยวข้องเพื่อตรวจสอบย้อนหลังได้
-- ต้องมีการ index ข่าวย้อนหลังทั้ง 3 ภาษาลงใน Vector Store และ Graph Database
+- มีหน้าจอ Chat (`GET /chat` + `POST /chat/ask`) สำหรับผู้ใช้ที่ login ค้นหาข่าวย้อนหลังด้วยภาษาธรรมชาติ
+- **การทำงานจริง (ณ ส.ค. 2026) ใช้ "RAG แบบเบา" (keyword + entity retrieval) ไม่ใช่ Graph DB จริง:**
+  - `GraphRagService::retrieve()` ค้นหาจาก `title/summary/body` + `news_translations` ด้วย SQL LIKE บน keyword และ entity ที่สกัดจากคำถาม (หยุดคำภาษาไทย/อังกฤษ)
+  - `GraphRagService::extractKeywords()` แยก keyword + สไลด์ n-gram สำหรับภาษาไทย/จีน (ไม่มีช่องว่างระหว่างคำ)
+  - `buildContext()` สร้างบริบทข่าวพร้อม source + วันที่ + URL
+  - `generateAnswer()` ส่ง prompt ไป LLM (Gemini `gemini-2.5-flash`) ผ่าน `services.llm.*` ให้ตอบพร้อม citation [index]; **ถ้า LLM ไม่พร้อม (quota หมด / key ว่าง) จะ fallback ส่งรายการข่าวที่เกี่ยวข้อง ("พบข่าวที่เกี่ยวข้องดังนี้...")**
+  - Response ประกอบด้วย `answer`, `sources[]` (id, title, url, source, published_at, relevance), `entities`, `keywords`
+- ยังไม่มี: จริง ๆ ไม่มี pgvector/embedding/Neo4j ต่อในเวิร์กโฟลว์นี้ (config มี NEO4J_* และ EMBEDDING_* ไว้ แต่ `GraphRagService` ไม่ได้เรียกใช้) — ถือเป็นส่วน "เตรียมโครงสร้าง" สำหรับ Phase 2
 
 #### 2.1.6 Idea เพิ่มเติม (เพิ่มเติมจาก Requirement)
 - **หมวดหมู่และแท็กข่าวอัตโนมัติ** — ระบบจัดหมวดหมู่ข่าว (การเมือง เศรษฐกิจ เทคโนโลยี กีฬา ฯลฯ) และแท็กอัตโนมัติด้วย NLP เพื่อช่วยสมาชิกเลือกหัวข้อที่สนใจ
@@ -103,29 +107,31 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 
 #### 2.2.1 ส่งข่าวไปยังสมาชิกตามช่องทางและเวลาที่กำหนด
 - ระบบส่งข่าวล่าสุดไปยังสมาชิกตามช่องทางและตารางเวลาที่สมาชิกแต่ละรายกำหนด
-- ระบบส่งข่าวล่าสุดไปยังสมาชิกตามภาษาที่กำหนดไว้
-- สมาชิกสามารถตั้ง schedule (วัน/เวลา) สำหรับการส่งข่าวแต่ละประเภท/หัวข้อ
-- การส่งทำงานเป็น background job ผ่าน n8n ตามเวลาที่กำหนด
+- ระบบส่งข่าวล่าสุดไปยังสมาชิกตามภาษาที่กำหนดไว้ (`preferred_locale`)
+- สมาชิก/Admin ตั้ง schedule (วัน/เวลา) สำหรับการส่งข่าวแต่ละประเภท/หัวข้อผ่านตาราง `member_schedules`
+- **การทำงานจริง: Laravel scheduled job `dailynews:deliver` (ทุก 1 นาที)** เป็นตัวส่งหลัก — เรียก `DeliveryService::deliverScheduleNow()` ตาม schedule ที่ครบกำหนด; n8n มี webhook "Trigger Deliver (Laravel)" ที่เรียก API ให้ trigger การส่งเช่นกัน ส่วน n8n deliver workflow (`dailynews-deliver.json`) มีใน repo แต่ถูกตั้ง inactive ใน prod
 
 #### 2.2.2 สมาชิกสามารถรับข่าวได้มากกว่า 1 ช่องทาง
 - สมาชิก 1 ราย รับข่าวได้หลายช่องทางพร้อมกัน (เช่น LINE OA + Email)
-- แต่ละช่องทางของสมาชิกมีสถานะ Active/Inactive และ Credential ของตัวเอง
+- แต่ละช่องทางของสมาชิกมีสถานะ Active/Inactive และ Credential ของตัวเอง (ตาราง `member_channels`)
 
 #### 2.2.3 การแปลข่าวให้ตรงกับภาษาสมาชิกก่อนส่ง (Translation on Delivery)
 - ข่าวทุกชิ้นที่ส่งให้สมาชิก ต้องอยู่ในภาษา `preferred_locale` ของสมาชิกคนนั้น (th / en / zh)
-- ระบบส่งข่าว (ทั้งแบบ Schedule และปุ่มส่งข่าวทันที) จะตรวจก่อนส่งว่าแต่ละข่าวมี translation ในภาษาสมาชิกหรือไม่; ถ้ายังไม่มีให้แปลทันทีด้วย TranslationService (Gemini) แล้วค่อยส่ง
+- ระบบส่งข่าว (ทั้งแบบ Schedule และปุ่มส่งข่าวทันที) ตรวจก่อนส่งว่าแต่ละข่าวมี translation ในภาษาสมาชิกหรือไม่; ถ้ายังไม่มีให้แปลทันทีด้วย TranslationService (Gemini) แล้วค่อยส่ง
 - ถ้าภาษาต้นทางของข่าวเท่ากับภาษาสมาชิก จะใช้ข้อความต้นฉบับ (ไม่เสียค่า API)
+- ถ้า Gemini quota หมด → ระบบข้ามการแปลและส่งเนื้อหาต้นฉบับ (log WARNING "Translation skipped, sending original")
 - ผลการแปลเก็บในตาราง `news_translations` เพื่อใช้ซ้ำในครั้งถัดไป
 
-#### 2.2.3 ช่องทางส่งข่าวเริ่มต้น
-- **LINE ส่วนตัว** — ส่งข้อความ/Flex Message ผ่าน LINE Messaging API (กลุ่ม/ผู้รับที่ลงทะเบียน)
-- **LINE OA** — ส่งข้อความผ่าน LINE Official Account (broadcast / multi-cast)
-- **Email** — ส่งข่าวเป็น HTML email ผ่าน SMTP
+#### 2.2.3 ช่องทางส่งข่าวเริ่มต้น (ChannelType enum: line_personal / line_oa / email)
+- **LINE ส่วนตัว** (`line_personal`) — ส่งผ่าน LINE Messaging API ไปยัง `line_user_id` (ขึ้นต้นด้วย `U...`)
+- **LINE OA** (`line_oa`) — ส่งผ่าน LINE Official Account; เก็บ credential ต่อสมาชิก (`line_oa_basic_id`, `line_oa_channel_id`, `line_oa_channel_secret`) และรองรับ broadcast delivery
+- **Email** (`email`) — ส่งข่าวเป็น HTML email ผ่าน SMTP
+- การส่งจริงใน Production: LINE ใช้ LINE Messaging API credential จาก `services.line.*`; email ใช้ SMTP ตาม `MAIL_*` (หมายเหตุ: prod `MAIL_USERNAME/PASSWORD` ว่างอยู่ ต้องตั้งค่าก่อนจึงส่ง Email ได้จริง)
 
 #### 2.2.4 Idea เพิ่มเติม (เพิ่มเติมจาก Requirement)
-- **Telegram / WhatsApp / Web Push** — ออกแบบโครงสร้าง channel interface ให้ขยายเพิ่มได้ในอนาคต
-- **อีเมลสรุปประจำวัน (Daily Digest)** — สรุปข่าวที่น่าสนใจตามหัวข้อที่สมาชิกเลือก ส่งตอนเช้าตามเวลาที่กำหนด
-- **Log การส่งและรายงานผล** — บันทึกสถานะการส่งทุกครั้ง (success/fail, error) และ Dashboard แสดงสถิติการส่ง
+- **Telegram / WhatsApp / Web Push** — โครงสร้าง channel interface รองรับการขยาย (ChannelType enum + member_channels)
+- **อีเมลสรุปประจำวัน (Daily Digest)** — ยังไม่พัฒนา
+- **Log การส่งและรายงานผล** — บันทึก `delivery_logs` (channel_type, news_ids, status, error_message, sent_at, schedule_id) และ Dashboard แสดงสถิติการส่ง; มีปุ่มส่งข่าวทันทีในหน้าตารางเวลา (schedule page) ให้เรียก `POST schedules/{schedule}/send-news`
 
 ### 2.3 Feature การค้นหาข่าว (เปิดให้ใช้สำหรับ Admin เท่านั้น)
 - หน้าจอค้นหาข่าวด้วย keyword
@@ -147,18 +153,21 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 - ระบบนำหัวข้อที่สมาชิกสนใจไปใช้กรองข่าวเพื่อส่งให้สมาชิก
 
 #### 2.4.3 สมาชิกตั้งค่า Schedule ส่งข่าว
-- สมาชิกกำหนดวัน/เวลาที่ต้องการให้ระบบส่งข่าวในแต่ละประเภท/หัวข้อ
-- เช่น ส่งข่าวเทคโนโลยีทุกวัน 08:00 น. และสรุปข่าวเช้าทุกวันจันทร์-ศุกร์ 07:30 น.
-- ระบบเก็บ schedule ของสมาชิกในตาราง member_schedules และให้ n8n นำไปใช้ในการ trigger การส่ง
+- สมาชิก/Admin กำหนดชื่อ schedule, ความถี่ (ทุกวัน / รายสัปดาห์ / รายเดือน), เวลา, จำนวนข่าวสูงสุด (limit), ช่องทาง และหมวดหมู่ที่สนใจ (ไม่เลือก = ทั้งหมด)
+- ระบบแปลงตัวเลือกเป็น cron expression อัตโนมัติ (daily/weekly/monthly) และให้แก้ไข cron เองได้ในโหมดขั้นสูง
+- ระบบเก็บ schedule ในตาราง `member_schedules` (name, cron_expression, channels[], categories[], languages[], limit, is_active) และ Laravel scheduled job `dailynews:deliver` (ทุกนาที) ใช้ในการ trigger การส่ง
+- Admin จัดการ schedule ผ่านหน้า `admin/members/{member}/schedules`: เพิ่ม, **แก้ไข** (หน้า `schedules/{schedule}/edit`, PATCH), ลบ, เปิด/ปิด และปุ่มส่งข่าวทันที (ดู 2.4.4)
 
 #### 2.4.4 ปุ่มส่งข่าวทันที (Send News Now)
-- ผู้ดูแลระบบ (Admin) สามารถกดปุ่ม **"ส่งข่าว"** ในหน้าจอจัดการสมาชิก เพื่อส่ง **ข่าว Lot ล่าสุด** ที่ระบบได้รับมา ให้กับสมาชิกคนนั้น **ทันที** โดยไม่ต้องรอรอบ Schedule
-- ข่าว Lot ล่าสุด หมายถึง กลุ่มข่าวที่ถูก ingest ในรอบล่าสุด (news ที่มี `fetched_at` อยู่ในช่วง 10 นาทีก่อน `fetched_at` สูงสุดของระบบ) เรียงตาม `published_at` ใหม่สุดก่อน จำกัดจำนวน 5 ข่าวต่อครั้ง (ค่า configurable)
-- ระบบจะส่งไปยัง **ทุกช่องทางที่เปิดใช้งาน (Active)** ของสมาชิกคนนั้น (LINE ส่วนตัว / LINE OA / Email) ตามที่ตั้งค่าไว้ใน member_channels
-- เมื่อกดปุ่มแล้ว Admin จะเห็นผลการส่งเป็นรายช่องทาง (สำเร็จ/ล้มเหลว พร้อมจำนวนข่าวที่ส่ง)
-- ทุกครั้งที่ส่งต้องบันทึก DeliveryLog (channel_type, news_ids, status, error_message, sent_at) โดย `schedule_id` เป็น `null` เพื่อบอกว่าเป็นการส่งแบบ manual
-- ทุกครั้งที่ส่งต้องบันทึก AuditLog (`member`, `send_news`) พร้อมช่องทางและจำนวนข่าวที่ส่ง
-- กรณีไม่มีข่าวในระบบ / ไม่มีช่องทางที่เปิดใช้งาน / สมาชิกถูกปิดใช้งาน → ต้องแสดงข้อความแจ้งให้ Admin ทราบ (HTTP 422)
+- Admin กดปุ่ม **"ส่งข่าว"** ที่แถวของ **schedule แต่ละอัน** ในหน้า ตารางเวลาส่งข่าว (`POST schedules/{schedule}/send-news`) เพื่อส่งข่าวตาม **กฎของ schedule นั้น** ทันที โดยไม่ต้องรอรอบ Schedule
+- การทำงานจริง (ณ ส.ค. 2026) เปลี่ยนจากแนวคิด "ข่าว Lot 10 นาที" เป็น: ใช้กฎของ schedule นั้น (categories, keyword interests ของสมาชิก, limit) ผ่าน `DeliveryService::deliverScheduleNow($schedule)`
+- ระบบจะส่งไปยัง **ช่องทางที่ระบุไว้ใน schedule นั้น** (LINE ส่วนตัว / LINE OA / Email) ตาม `member_channels` ที่เปิดใช้งาน
+- เมื่อกดปุ่มแล้ว Admin จะเห็นผลการส่ง (สำเร็จ/ล้มเหลว พร้อมจำนวนข่าวและช่องทาง) ผ่าน popup + reload
+- ทุกครั้งที่ส่งบันทึก `delivery_logs` (channel_type, news_ids, status, error_message, sent_at, schedule_id, member_id)
+- ทุกครั้งที่ส่งบันทึก AuditLog (`member_schedule`, `send_news`) พร้อมช่องทางและจำนวนข่าว
+- กรณีไม่มีข่าว / ไม่มีช่องทางที่เปิดใช้งาน / สมาชิกถูกปิดใช้งาน → ตอบ HTTP 422 พร้อมข้อความแจ้ง Admin
+- ข่าวที่ส่งให้สมาชิกแปลเป็นภาษาสมาชิก (preferred_locale) ก่อนส่งเสมอ (ดู 2.2.3); ถ้า quota หมด → ส่งต้นฉบับ
+- หมายเหตุ: LINE ต้องใช้ LINE userId (ขึ้นต้น `U...`) ที่ถูกต้อง / LINE OA credential; Email ต้องตั้ง SMTP ครบก่อน
 - ข่าวที่ส่งให้สมาชิกจะถูกแปลเป็นภาษาที่สมาชิกตั้งค่า (preferred_locale) ก่อนส่งเสมอ (ดูหัวข้อ 2.2.3)
 - หมายเหตุ: การส่งจริงผ่าน LINE ต้องใช้ LINE userId (ขึ้นต้นด้วย `U...`) ที่ถูกต้อง และ Email ต้องตั้งค่า SMTP credentials ให้พร้อมก่อน
 
@@ -215,26 +224,25 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 
 ## 3. เทคโนโลยีที่ใช้ (Technology Stack)
 
-| ส่วนประกอบ | เทคโนโลยีที่เลือก | หมายเหตุ |
+| ส่วนประกอบ | เทคโนโลยีที่ใช้จริง (Production) | หมายเหตุ |
 |---|---|---|
-| OS ของ Server | **Ubuntu (LTS)** | Opensource |
-| Workflow / Background Job (รับข่าว + ส่งข่าว) | **n8n** | Workflow engine, cron trigger, webhook |
-| ฐานข้อมูลหลัก | **PostgreSQL** | เก็บข่าว สมาชิก ระบบทั้งหมด |
-| Web Application (Frontend + Backend) | **PHP 8.4.x + Laravel 12** | Framework ที่นิยมและเป็นมาตรฐาน |
-| Database ของ Web App | **MySQL** | ตามที่ติดตั้งไว้แล้ว (ใช้สำหรับข้อมูล Web app) |
-| Dashboard / BI | **Metabase** หรือ **Grafana** | Opensource ยอดนิยม; แนะนำ Metabase ใช้งานง่าย + query กับ PostgreSQL |
-| Frontend Framework | **Vue.js 3** หรือ **Laravel Blade + Alpine.js** | รองรับ SPA/CSR ที่ต้องการ |
-| Search Engine | **OpenSearch** (หรือ PostgreSQL FTS สำหรับ Phase 1) | ค้นหา keyword, full-text |
-| Vector Store | **pgvector (บน PostgreSQL)** หรือ **Qdrant** | เก็บ embedding สำหรับ Graph RAG |
-| Graph Database | **Neo4j** (Community Edition) | ใช้ในระบบ Graph RAG |
-| Embedding / LLM | **API แปลภาษา + Embedding** (เช่น Google Translate API / OpenRouter / Ollama) | ใช้ LLM สำหรับแปลและตอบคำถาม |
-| Translation | Translation service (opensource เช่น Argos Translate, LibreTranslate หรือ API) | สำหรับแปล 3 ภาษา |
-| Message Queue / Scheduler | **Redis** (cache + queue) + **n8n schedules** | สำหรับ background job รับ/ส่งข่าว |
-| Web Server | **Nginx** + PHP-FPM | Opensource |
-| Container | **Docker / Docker Compose** | จัดการ n8n, Postgres, services ต่าง ๆ |
-| CI/CD & Monitoring (optional) | GitHub Actions, Uptime Kuma | สำหรับ Deploy และตรวจสอบความพร้อมใช้งาน |
+| OS ของ Server | **Shared Linux hosting (cPanel-style, domains/…/public_html)** | Production ไม่ใช่ Ubuntu เฉพาะ |
+| Web Server | **Apache (ผ่าน cPanel)** + PHP-FPM | `deploy/nginx-dailynews.conf` มีไว้สำหรับ Ubuntu option |
+| Web Application (Backend) | **PHP 8.3.x + Laravel 12** (`php: ^8.2`, runtime 8.3.32) | Framework มาตรฐาน |
+| ฐานข้อมูล (หลัก + ทั้งหมด) | **MySQL / MariaDB** (เดียว) | `DB_CONNECTION=mysql`, DB `ittipolint_dailynews`; เก็บข่าว สมาชิก แหล่งข่าว แปลภาษา schedule log ทั้งหมด |
+| Workflow / Background Job | **Laravel Console Scheduler (`schedule:run`) + n8n (webhook เท่านั้น)** | `dailynews:ingest`/`translate` (รายชั่วโมง) + `dailynews:deliver` (ทุกนาที); n8n ใช้สำหรับ Fetch Now webhook + trigger deliver |
+| AI / LLM / Translation | **Google Gemini** (`gemini-2.5-flash`) | แปลข่าว 3 ภาษา + ตอบคำถาม chat; embedding config มีไว้ (gemini-embedding-001) แต่ยังไม่เชื่อม workflow |
+| Frontend | **Laravel Blade + Bootstrap 5 (Bootstrap Icons)** + vanilla JS/AJAX | ไม่ใช้ Vue.js |
+| Search (Admin) | **MySQL `LIKE` + filters** (`NewsSearchService`) | ค้นหา title/summary/body + กรองหมวด/แหล่ง/ภาษา/ช่วงเวลา |
+| Cache / Session / Queue | **File** (`CACHE_STORE=file`, `SESSION_DRIVER=file`, `QUEUE_CONNECTION=sync`) | ไม่ใช้ Redis ใน Production |
+| Notification Channel | **LINE Messaging API** + **SMTP Email** | ผ่าน `services.line.*` / `MAIL_*` |
+| Web Server (ทางเลือก Ubuntu) | **Nginx + PHP-FPM** | `deploy/` (ท้องถิ่น/Ubuntu) |
+| Container | **Docker / Docker Compose — เฉพาะ Local Dev เท่านั้น** | `docker/docker-compose.yml` มี n8n, Postgres, MySQL, Redis, Metabase แต่ **ไม่ได้ใช้ใน Production** (ดูหัวข้อ Docker) |
+| Dashboard / BI | **Laravel Blade Dashboard** (สถิติ + Export CSV) | มี API `dashboard/stats` + `dashboard/export`; Metabase มีใน docker local เท่านั้น |
+| Database ฝั่ง n8n | **PostgreSQL** (เฉพาะ service n8n/Metabase ใน Docker local) | ไม่ใช่ฐานข้อมูลหลักของแอป |
+| Search semantic | PostgreSQL FTS / pgvector / Neo4j ยัง **ไม่นำมาใช้** ใน workflow ปัจจุบัน | config มี NEO4J_* / EMBEDDING_* / VECTOR_* เหลือไว้สำหรับ Phase 2 |
 
-> **หมายเหตุ:** Web Application หลักใช้ PHP + MySQL ตามข้อกำหนด 2.6 และ 2.7 ขณะที่ Postgres (ข้อกำหนด 2.4) ใช้เป็นฐานข้อมูลหลักสำหรับ n8n เก็บข่าวและข้อมูลโครงสร้าง (news, members, translations) ข้อมูล reference/web ใช้ MySQL
+> **ข้อเท็จจริงสำคัญ:** แอปหลักใน Production ใช้ **MySQL/MariaDB ฐานเดียว** (เก็บข้อมูลทุกอย่างของแอป) ตาม `DB_CONNECTION=mysql`. PostgreSQL/Redis นั้น **ปรากฏเฉพาะใน docker-compose (Local Dev)** สำหรับ n8n/Metabase และไม่ได้เป็นฐานข้อมูลหลักของแอปใน Production. ส่วน Neo4j/pgvector/embedding เป็นการ "เตรียมโครงสร้าง" ยังไม่ต่อเข้าเวิร์กโฟลว์จริงในส.ค. 2026
 
 ---
 
@@ -242,153 +250,229 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 
 ```
                         ┌──────────────────────────────────────────┐
-                        │             Sources (RSS/API/Web)         │
-                        └────────────────────┬─────────────────────┘
-                                             │
-   ┌───────────────────────┐                 │
-   │  n8n Workflow          │  fetch/parse    │
-   │  (Ingestion jobs)      ├─────────────────┘
-   │  (Scheduler/Cron)      │
-   └──────────┬────────────┘
-              │ normalize + dedup
-              ▼
-   ┌───────────────────────┐     ┌───────────────────────┐
-   │   PostgreSQL          │     │  Vector Store         │
-   │   (news, members,     │────▶│  (pgvector/Qdrant)    │
-   │    schedules, ...)    │     └──────────┬────────────┘
-   └──────────┬────────────┘                │
-              │ translation pipeline        │ embedding
-              ▼                             ▼
-   ┌───────────────────────┐     ┌───────────────────────┐
-   │   Translation Engine   │     │  Graph DB (Neo4j)     │
-   │   (th/en/zh)           │     │  Graph RAG index      │
-   └──────────┬────────────┘     └──────────┬────────────┘
-              │                             │
-              ▼                             ▼
-   ┌───────────────────────┐     ┌───────────────────────┐
-   │  n8n Workflow          │     │  Web App (PHP+Laravel)│
-   │  (Delivery jobs)       │     │  - Admin panel        │
-   │  send via LINE/Email   │◀────│  - Chat Graph RAG     │
-   └──────────┬────────────┘     │  - Dashboard UI       │
-              │                  └──────────┬────────────┘
-              ▼                             │
-   ┌───────────────────────┐                ▼
-   │ LINE Personal/OA,      │     ┌───────────────────────┐
-   │ Email (SMTP)           │     │  Metabase / Grafana    │
-   └───────────────────────┘     └───────────────────────┘
+                        │          Sources (RSS/API/Web)            │
+                        └───────────────┬──────────────────────────┘
+                                        │
+              ┌─────────────────────────┼──────────────────────────┐
+              │ n8n (webhook only)      │ Laravel scheduled jobs   │
+              │ "Fetch Source Now"      │ dailynews:ingest (hourly)│
+              │ dailynews-fetch-now     │ dailynews:translate      │
+              └──────────┬──────────────┴──────────────┬───────────┘
+                         │ POST /api/ingest/push       │ IngestionService
+                         ▼                             ▼
+                 ┌───────────────────────────────────────────────┐
+                 │        MySQL / MariaDB  (ittipolint_dailynews)│
+                 │  news, news_translations, news_sources,       │
+                 │  members, member_channels, member_schedules,  │
+                 │  member_interests, delivery_logs, credentials │
+                 └───────────────┬───────────────────────────────┘
+                                 │
+                    ┌────────────┴─────────────┐
+                    ▼                           ▼
+        ┌─────────────────────────┐  ┌───────────────────────────┐
+        │ TranslationService      │  │ DeliveryService            │
+        │ (Gemini gemini-2.5-flash│  │ (dailynews:deliver, every  │
+        │  → news_translations)   │  │  1 min; schedule-based)    │
+        └─────────────────────────┘  └─────────────┬─────────────┘
+                                                   ▼
+                    ┌──────────────────────────────────────────┐
+                    │  Channels: LINE Personal / LINE OA / Email│
+                    └──────────────────────────────────────────┘
+
+        ┌──────────────────────────────────────────┐
+        │  Web App (Laravel 12 + Blade + Bootstrap)│
+        │   - Admin panel / Dashboard (stats+CSV)  │
+        │   - News Search (Admin, MySQL LIKE)      │
+        │   - Chat AI (GraphRagService: keyword    │
+        │     retrieval + Gemini LLM w/ citation)  │
+        └──────────────────────────────────────────┘
 ```
 
 ### 4.1 หลักการทำงานหลัก (Key Flows)
 
 **Flow 1: รับข่าว (Ingestion)**
-1. n8n Cron trigger ตาม schedule ของแต่ละ source → ดึงข้อมูล (RSS/API/Crawl)
-2. Parse + Normalize → ตรวจซ้ำ (dedup) → บันทึก Postgres
-3. Trigger translation pipeline → แปลเป็น th/en/zh → เก็บ news_translations
-4. สร้าง embedding → เก็บ Vector Store
-5. สร้าง/อัปเดต nodes & edges ใน Graph DB (Graph RAG index)
+1. Trigger: Laravel schedule `dailynews:ingest` (ทุก 1 ชม.) หรือ n8n webhook "Fetch Source Now" (กดปุ่มในหน้า Admin)
+2. `IngestionService` ดึงตาม `fetch_type` (rss/api/crawl) — RSS ผ่าน HTTP + parse XML, API ผ่าน HTTP + normalize, Crawl ผ่าน CSS selectors
+3. Mapping + Deduplication (`source_url` unique + `content_hash`) → บันทึก MySQL
+4. `dailynews:translate` (ทุก 1 ชม.) แปล pending เป็น th/en/zh ลง `news_translations` (Gemini)
 
 **Flow 2: ส่งข่าว (Delivery)**
-1. n8n Cron trigger ตาม schedule ของสมาชิกแต่ละราย/แต่ละหัวข้อ
-2. Query ข่าวใหม่ที่ตรงกับหัวข้อที่สนใจ
-3. สร้างข้อความ/อีเมลตาม channel template
-4. ส่งผ่าน LINE Messaging API / SMTP
-5. บันทึก delivery log
+1. Laravel schedule `dailynews:deliver` (ทุกนาที) ตรวจ `member_schedules` ที่ครบกำหนด (หรือ Admin กดปุ่มส่งข่าวทันทีในหน้า schedule)
+2. `DeliveryService::deliverScheduleNow()` Query ข่าวตามกฎ schedule (categories / interests ของสมาชิก / limit)
+3. ตรวจ/แปลภาษาให้ตรง `preferred_locale` (Gemini; ถ้า quota หมดส่งต้นฉบับ)
+4. ส่งผ่าน LINE Messaging API (personal/OA) หรือ SMTP email ตาม `member_channels`
+5. บันทึก `delivery_logs` + `audit_logs`
 
-**Flow 3: Chat Graph RAG**
-1. ผู้ใช้ส่งคำถามเป็นภาษาธรรมชาติ
-2. ระบบทำ embedding ค้นหา semantic + query graph สำหรับบริบท/เอนทิตี
-3. LLM สร้างคำตอบพร้อม citation จากข่าวจริง
-4. แสดงผลพร้อมลิงก์อ้างอิงไปยังบทความต้นฉบับ
-
----
-
-## 5. โครงสร้างฐานข้อมูล (Data Model — เบื้องต้น)
-
-### 5.1 PostgreSQL (ฐานข้อมูลหลัก)
-- `news_sources` — id, name, url, locale, fetch_type (rss/api/crawl), cron_expression, credentials (encrypted), is_active, last_fetched_at, created_at, updated_at, deleted_at
-- `news` — id, source_id (FK), source_url (unique), title, summary, body, category, tags[], published_at, fetched_at, lang, sentiment (optional), created_at
-- `news_translations` — id, news_id (FK), locale (th/en/zh), title, summary, body, translated_at, status
-- `categories` / `news_categories` — หมวดหมู่ข่าว
-- `members` — id, member_type_id, name, email, status, line_user_id, line_oa_user_id, is_active, created_at, deleted_at
-- `member_types` — id, code, name, description (องค์กร/บุคคล ฯลฯ)
-- `member_channels` — id, member_id, channel_type (line_personal/line_oa/email), credentials (encrypted), is_active
-- `member_interests` — id, member_id, category/keyword/tag, config
-- `member_schedules` — id, member_id, schedule_name, cron_expression, channels[], categories, is_active
-- `delivery_logs` — id, member_id, channel_type, news_ids[], status, error_message, sent_at
-- `subscriptions` (รองรับ Phase ถัดไป) — id, member_id, package_id, plan_start_date, plan_end_date, status, billing_cycle
-- `packages` (รองรับ Phase ถัดไป) — id, name, price, currency, features
-- `credentials` — id, code, config (encrypted), updated_by, updated_at (เก็บ Credential ระบบ)
-- `audit_logs` — id, user_id, action, entity, entity_id, old_value, new_value, created_at
-
-### 5.2 MySQL (ฐานข้อมูล Web App ตามข้อกำหนด 2.6)
-- ใช้สำหรับตารางของ Web Application (users/admin, sessions, migrations, config) ตามที่ framework กำหนด
+**Flow 3: Chat AI (RAG แบบเบา)**
+1. ผู้ใช้ส่งคำถาม (`POST /chat/ask`)
+2. `GraphRagService` สกัด keyword/entity (รวม n-gram สำหรับภาษาไทย/จีน) → query MySQL (title/summary/body + translations) ด้วย LIKE
+3. buildContext → Gemini `generateContent` สร้างคำตอบพร้อม citation [index]
+4. แสดงคำตอบ + `sources[]` (ลิงก์บทความต้นฉบับ); ถ้า LLM ล้มเหลว → fallback รายการข่าวที่เกี่ยวข้อง
 
 ---
 
-## 6. ข้อกำหนดทางเทคนิคและความปลอดภัย
+## 5. โครงสร้างฐานข้อมูล (Data Model)
 
-- เก็บ Credential ทั้งหมดแบบเข้ารหัส (encrypted at rest) ไม่แสดงค่าจริงในหน้าจอ (masked)
-- ใช้ HTTPS ทุกช่องทาง
-- RBAC: แยกสิทธิ์ Admin / Staff / สมาชิก
-- Webhook จาก n8n ต้องตรวจสอบ Signature/Secret
-- Rate limiting สำหรับ API และหน้า login
-- Backup ฐานข้อมูลอัตโนมัติเป็นรายวัน (PostgreSQL + MySQL)
-- Error handling: ระบบบันทึก error log และมี retry กลไกใน n8n
-- นโยบายความเป็นส่วนตัวของข้อมูลสมาชิก
+### 5.1 ฐานข้อมูลหลัก: MySQL/MariaDB (`ittipolint_dailynews`) — ตาม `DB_CONNECTION=mysql`
+ตารางแอปพลิเคชัน (สร้างโดย migration `2026_08_01_000001_create_dailynews_core_tables.php`):
+- `news_sources` — id, name, slug, url, locale, fetch_type (rss/api/crawl), feed_url, cron_expression, credentials (json), config (json), category, is_active, last_fetched_at, last_status, last_error, timestamps, deleted_at
+- `categories` — id, code, name, is_active
+- `news` — id, source_id (FK), source_url (unique), title, summary, body, category, tags (json), thumbnail, lang, content_hash (dedup), status, sentiment, is_breaking, published_at, fetched_at
+- `news_translations` — id, news_id (FK), locale (th/en/zh), title, summary, body, status, error_message, translated_at; unique(news_id, locale)
+- `member_types` — id, code, name, description, is_active (บุคคล/องค์กร)
+- `members` — id, member_type_id (FK), name, email, line_user_id, line_oa_user_id, line_oa_basic_id, line_oa_channel_id, line_oa_channel_secret, line_oa_webhook_url, preferred_locale, status, is_active, plan_start_date, plan_end_date, deleted_at
+- `member_channels` — id, member_id (FK), channel_type (line_personal/line_oa/email), credentials (json), is_active; unique(member_id, channel_type)
+- `member_interests` — id, member_id (FK), type, value, config (json), is_active; unique(member_id, type, value)
+- `member_schedules` — id, member_id (FK), name, cron_expression, channels (json), categories (json), languages (json), limit, is_active
+- `delivery_logs` — id, member_id, schedule_id, channel_type, news_ids (json), status, error_message, sent_at
+- `packages` / `subscriptions` (Phase 2 — โครงสร้างพร้อม) — id, code, name, price, currency, features / id, member_id, package_id, plan_start/end_date, billing_cycle, status, payment_gateway, payment_ref
+- `credentials` — id, code, name, config (json, encrypted), is_active, updated_by, last_tested_at (LINE, SMTP, Gemini LLM, n8n API, Neo4j)
+- `audit_logs` — id, user_id, action, entity, entity_id, old_value (json), new_value (json)
+
+### 5.2 ตาราง framework (Laravel) อยู่ใน MySQL เดียวกัน (migration `2026_08_01_000002_create_framework_tables.php`)
+- `users` (พร้อม column `role`: admin/staff/member), `password_reset_tokens`, `sessions`, `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs`
+
+### 5.3 PostgreSQL / pgvector / Neo4j
+- **ไม่มีบทบาทเป็นฐานข้อมูลหลักของแอปใน Production**
+- ใช้เฉพาะใน Local Dev (docker) สำหรับ: (1) n8n ใช้ Postgres เก็บ workflow DB, (2) Metabase ใช้ Postgres, (3) เตรียมโครงสร้าง pgvector/Neo4j สำหรับ Phase 2 แต่ยังไม่มี schema/เอกสารแยกให้ตรวจสอบเพิ่มเติม
 
 ---
 
-## 7. สภาพแวดล้อมและการติดตั้ง (Deployment & Credentials)
+## 6. ข้อกำหนดทางเทคนิคและความปลอดภัย (สถานะจริง)
 
-### 7.1 Server Environment
-- OS: Ubuntu (ตามข้อกำหนด 2.1)
-- Web Server & Database Server: https://ittipolint-sbu.veya.co.th (สร้าง sub-path `/dailynews`)
-- FTP Server: IP `119.59.116.53`, User `ittipolint` (Pass ตามที่กำหนดไว้)
-- n8n Server: https://n8n38-sbu.veya.co.th
+- Credential เก็บแบบเข้ารหัส (encrypted at rest ด้วย `CREDENTIAL_ENCRYPTION_KEY`) และ input ที่เป็น secret มีปุ่ม show/hide (masked) ในหน้า Admin
+- ใช้ HTTPS ทุกช่องทาง (SESSION_SECURE_COOKIE=true)
+- RBAC: แยกสิทธิ์ **Admin / Staff / Member** ผ่าน column `users.role` + middleware `EnsureUserHasRole`
+- API ภายใน (n8n ↔ Laravel) ตรวจสอบผ่าน **X-API-Token** (middleware `ApiToken`) — ไม่ใช่ signature/secret per request
+- Rate limiting: login (throttle 10/min) และ API routes
+- Backup: `deploy/backup.sh` (ตั้ง crontab `0 2 * * *`) + `deploy/restore.sh` — dump MySQL `ittipolint_dailynews`
+- Error handling: log แยก channel (`ingest`, `delivery`, `translation`, `daily` Laravel) + retry/backoff ใน TranslationService; n8n nodes ใช้ `onError: continueRegularOutput` กัน workflow ตายกลางคัน
+- Privacy: นโยบายข้อมูลสมาชิก (อ้างอิงตาม Requirement)
 
-### 7.2 Credential ที่สำคัญ (ตามเอกสาร Requirement)
+---
+
+## 7. สภาพแวดล้อมและการติดตั้ง (Deployment & Credentials) — สถานะจริง
+
+### 7.1 Server Environment (Production)
+- Web Server & Database Server: **shared Linux hosting** → `https://ittipolint-sbu.veya.co.th` (sub-path `/dailynews`), root จริงบน FTP = `public_html/dailynews/` (CWD `/home/ittipolint/domains/ittipolint-sbu.veya.co.th/public_html/dailynews`)
+- FTP: IP `119.59.116.53`, User `ittipolint`
+- ฐานข้อมูล: MySQL/MariaDB เดียว `ittipolint_dailynews`
+- n8n Server (แยก): `https://n8n38-sbu.veya.co.th`
+- Deploy วิธีปัจจุบัน: **FTP upload ไฟล์** ไปยัง `public_html/dailynews/` (หรือใช้ `deploy/deploy.sh` + `nginx-dailynews.conf` บน Ubuntu option)
+- Cache/Session/Queue: **file** (ไม่มี Redis); Scheduler ผ่าน `php artisan schedule:run` (cron ทุกนาที)
+
+### 7.2 Credential ที่สำคัญ (ตามเอกสาร Requirement / .env Production)
 
 | รายการ | ค่า |
 |---|---|
 | **Web Server URL** | `https://ittipolint-sbu.veya.co.th/dailynews` |
 | **FTP IP / User** | `119.59.116.53` / `ittipolint` |
-| **DB name / User** | `ittipolint_dailynews` / `ittipolint_dailynews` |
+| **DB (MySQL)** | DB `ittipolint_dailynews` / user `ittipolint_dailynews` |
 | **n8n URL / User** | `https://n8n38-sbu.veya.co.th` / `ittipolint@gmail.com` |
-| **n8n API Key** | (ตามเอกสาร — เก็บใน Secret Management) |
-| **LINE Channel ID** | `1528339539` |
-| **LINE Channel Name** | `Ittipol@` |
-| **LINE Channel Secret** | (ตามเอกสาร — เก็บใน Secret Management) |
-| **LINE Access Token** | (ตามเอกสาร — เก็บใน Secret Management) |
+| **API Token (n8n ↔ Laravel)** | `API_TOKEN` ใน .env |
+| **LINE Channel ID / Name** | `1528339539` / `Ittipol@` |
 | **LINE Webhook URL** | `https://n8n38-sbu.veya.co.th/webhook/line` |
 | **Fetch Now Webhook URL** | `https://n8n38-sbu.veya.co.th/webhook/dailynews-fetch-now` |
-| **Email Sender** | `DailyNews` |
-| **Email Receive (ทดสอบ)** | `ittipolint@gmail.com` |
+| **Gemini (Translation + LLM)** | `GOOGLE_GEMINI_API_KEY` / `LLM_API_KEY`, model `gemini-2.5-flash` |
+| **Embedding (เตรียมไว้)** | `EMBEDDING_API_KEY`, model `gemini-embedding-001` |
+| **Email Sender** | `DailyNews` (`dailynews@ittipolint-sbu.veya.co.th`) |
+| **Admin** | `ADMIN_EMAIL=ittipolint@gmail.com` |
 
-> **หมายเหตุ:** ค่า Secret ทั้งหมดถูกอ้างอิงตามเอกสาร Requirement Specification และต้องเก็บไว้ในระบบจัดการความลับ (Secret Store / Environment Variables) ห้าม hardcode ใน source code หรือ commit ลง Git
+> **หมายเหตุ:** Secret ทั้งหมดเก็บใน `.env` Production (และสำรองใน `dn-prod-env.backup`); ห้าม hardcode/commit ลง Git. เอกสารนี้แสดงเฉพาะชื่อ field ไม่แสดงค่า secret
 
 ### 7.3 ข้อกำหนดเรื่อง Credential ใหม่
 - กรณีที่ระบบสร้าง/ออก Credential ใหม่ (เช่น Translation API Key, SMTP, Webhook Secret, LLM Key) ให้รายงานออกมาให้ทราบด้วยทุกครั้ง
 
 ---
 
-## 8. Roadmap การพัฒนา (Development Phases)
+## 8. ระบบ Background Workflow: n8n Workflows (บทบาทจริง)
 
-### Phase 1 (Phase นี้)
-- ตั้งค่า Server, PostgreSQL, n8n, Web App (Laravel)
-- Import แหล่งข่าวเริ่มต้น + workflow รับข่าว (RSS/API)
-- ระบบแปลภาษา th/en/zh ใช้ LLM ของ google
-- ระบบจัดการสมาชิก + channel LINE/Email + workflow ส่งข่าว
-- Dashboard พื้นฐาน (สถิติการรับ/ส่งข่าว) ด้วย Metabase
-- ระบบค้นหา keyword (Admin) + เริ่มต้น AI Graph RAG Chat
+### สรุปบทบาทจริง (ตรวจจาก n8n instance ณ ส.ค. 2026)
+- **เฉพาะ 2 workflows ที่ active:** "DailyNews - Fetch Source Now" (webhook) และ "DailyNews - Trigger Deliver (Laravel)"
+- **Ingest / Translate / Deliver workflows มีใน repo (`n8n/workflows/`) แต่ถูกตั้ง inactive** เพราะงานเหล่านี้ทำงานผ่าน Laravel scheduled jobs เป็นหลัก
+
+### 8.1 dailynews-ingest-rss.json — "DailyNews - Ingest RSS Sources" (inactive)
+- Trigger: ทุก 1 ชั่วโมง → GET `/api/v1/sources` → กรองเฉพาะ `fetch_type === 'rss'`
+- วนทีละแหล่ง (`splitInBatches`) → node RSS Feed Read parse feed (`feed_url || url`)
+- Build payload `{source: slug, items[]}` → IF items ไม่ว่าง → `POST /api/ingest/push`
+- หมายเหตุ: ปัจจุบันงานนี้ถูก Laravel `dailynews:ingest` ทับ (ทำ RSS/API/Crawl ครบในตัว)
+
+### 8.2 dailynews-ingest-api.json — "DailyNews - Ingest API Sources" (inactive)
+- Trigger: ทุก 1 ชั่วโมง → GET `/api/v1/sources` → กรอง `fetch_type === 'api'`
+- วนทีละแหล่ง → HTTP GET `feed_url` (JSON) → normalize (`articles|data|results`) → `POST /api/ingest/push`
+
+### 8.3 dailynews-fetch-source-now.json — "DailyNews - Fetch Source Now" (ACTIVE — webhook)
+- Trigger: **n8n Webhook** `POST /webhook/dailynews-fetch-now` (headerAuth, DailyNews API Token)
+- รับ payload จากปุ่ม "Fetch Now" ในหน้า Admin → Extract `source`
+- IF `fetch_type === 'rss'` → Parse RSS → Build RSS Payload → push
+- ELSE → Call API (`feed_url`, JSON) → Normalize → push
+- Push ไป `POST /api/ingest/push` เสมอ
+- ใช้ร่วมกับ `routes: POST /admin/sources/{source}/fetch-now` (Laravel ส่ง request ไป n8n) + `GET /api/v1/sources`
+
+### 8.4 dailynews-deliver.json — "DailyNews - Deliver News to Members" (inactive)
+- Trigger: ทุก 1 นาที → GET `/api/v1/schedules/due` → split → GET `/api/v1/news?from=today` → Build Message (ข่าว 5 ชิ้นบนสุด) → Fanout per channel
+- `Is LINE channel?` → `Send via LINE` (LINE node, ใช้ line_user_id/line_oa_user_id) มิฉะนั้น `Send via Email`
+- สุดท้าย `POST /api/v1/deliveries` บันทึก DeliveryLog
+- หมายเหตุ: ปัจจุบันการส่งทำผ่าน Laravel `dailynews:deliver` (ทุกนาที) เป็นหลัก ซึ่งมี translation-on-delivery + interests/categories filter ครบกว่า; workflow นี้เก็บไว้เป็นทางเลือก
+
+### 8.5 dailynews-translate.json — "DailyNews - Translate News (th/en/zh)" (inactive)
+- Trigger: ทุก 1 ชั่วโมง → `Empty Trigger` → GET `/api/v1/news?q=translate&limit=20` (ตรวจ pending)
+- Node สุดท้ายเป็น "Note / Health Check" — แปลว่า **การแปลจริงทำโดย Laravel** (`artisan dailynews:translate`); workflow นี้มีไว้ตรวจสุขภาพ/trigger เท่านั้น
+
+### 8.6 "DailyNews - Trigger Deliver (Laravel)" (ACTIVE)
+- Workflow ที่เปิดอยู่บน n8n instance ทำหน้าที่ trigger ให้ Laravel รันการส่ง (เรียก API ของแอป) — เป็น webhook/trigger helper
+
+### 8.7 Environment/credential ใน n8n
+- httpHeaderAuth credential "DailyNews API Token" ใช้กับทุก node ที่เรียก API DailyNews
+- LINE credential (Line Messaging account) ใช้ใน deliver workflow
+
+---
+
+## 9. Docker: บทบาทจริง
+
+### ใช้หรือไม่? — **เฉพาะ Local Development เท่านั้น; Production ไม่ใช้ Docker**
+- หลักฐาน: Production เป็น shared hosting/cPanel (FTP path `public_html/dailynews/`, PHP-FPM, MySQL เดียว, file cache/queue) ไม่มี container runtime; `docker/docker-compose.yml` มีไว้สำหรับรัน stack ทั้งหมดในเครื่อง dev
+
+### docker/docker-compose.yml มี services:
+| Service | Image | บทบาทใน Local Dev |
+|---|---|---|
+| `web` | build จาก `docker/php/Dockerfile` | Laravel app (PHP) mount `../webapp` |
+| `nginx` | nginx:1.27-alpine | serve app port `${WEB_PORT:-8080}` |
+| `mysql` | mysql:8.4 | DB ของแอป (dailynews) |
+| `postgres` | pgvector/pgvector:pg16 | สำหรับ n8n/Metabase + เตรียม vector |
+| `redis` | redis:7-alpine | cache/queue (ไม่ใช้ใน prod) |
+| `n8n` | n8nio/n8n:latest | workflow engine (local), DB = postgres |
+| `metabase` | metabase/metabase:v0.50.16 | BI/Dashboard (local) |
+
+- `docker/php/Dockerfile` + `php.ini`, `docker/nginx/default.conf` ใช้ configure สภาพ dev
+- เริ่มใช้งาน: `cd docker && cp .env.example .env && docker compose up -d --build`
+
+### สรุป
+- Docker = environment สำหรับพัฒนา/ทดสอบทั้งหมดในเครื่องเดียว (สะดวกพกพา)
+- Production deployment = FTP/rsync ขึ้น shared hosting (ดู section 7)
+
+---
+
+## 10. Roadmap การพัฒนา (Development Phases)
+
+### Phase 1 (สถานะปัจจุบัน — เสร็จตามที่พัฒนาจริง)
+- Web App Laravel (Admin/Member/Chat) + MySQL เดียว
+- Import แหล่งข่าวเริ่มต้น (14 sources) + ingestion (RSS/API/Crawl) ผ่าน Laravel + n8n fetch-now
+- ระบบแปลภาษา th/en/zh ใช้ Google Gemini (`dailynews:translate`)
+- ระบบจัดการสมาชิก + channel LINE/Email + schedule ส่งข่าว + ปุ่มส่งข่าวทันที (แก้ไข schedule ได้)
+- Dashboard พื้นฐาน (สถิติ + Export CSV) ใน Blade
+- ระบบค้นหา keyword (Admin) + AI Chat (RAG แบบเบา: keyword + Gemini LLM)
+- n8n ใช้เฉพาะ webhook (Fetch Now, Trigger Deliver)
 
 ### Phase 2 (ถัดไป)
-- การเก็บค่าสมาชิก / ต่ออายุ (subscription, packages, payment)
+- ต่อจริง: pgvector/embedding + Neo4j Graph DB เข้า GraphRagService (ปัจจุบันเป็น keyword-based)
+- การเก็บค่าสมาชิก / ต่ออายุ (subscription, packages, payment — โครงสร้างตารางมีแล้ว)
 - ช่องทางส่งข่าวเพิ่มเติม (Telegram, Web Push)
 - ปรับปรุง Graph RAG ให้มีข้อมูลเชิงลึกและ Personalized News
 
 ---
 
-## 9. รายการ Idea เพิ่มเติม (Enhancement Ideas)
+## 11. รายการ Idea เพิ่มเติม (Enhancement Ideas)
 
 1. หมวดหมู่/แท็กข่าวอัตโนมัติด้วย NLP
 2. ข่าวด่วน (Breaking News) และเร่งความถี่ดึงข่าว
@@ -403,7 +487,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 
 ---
 
-## 10. ผู้มีส่วนได้ส่วนเสียและการอนุมัติ
+## 12. ผู้มีส่วนได้ส่วนเสียและการอนุมัติ
 
 - **เจ้าของระบบ (Owner):** อ้างอิงตามข้อกำหนด — GitHub: https://github.com/Ittipolint/dailynews
 - **เอกสารต้นทาง:** `docs/Prompt.md` (Requirement Specification)
