@@ -51,9 +51,14 @@ class IngestApiController extends Controller
         $stored = [];
 
         foreach ($data['items'] as $item) {
-            $hash = hash('sha256', Str::lower(Str::slug($item['title'])).'|'.parse_url($item['url'], PHP_URL_HOST));
+            $normalizedTitle = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $item['title'])));
+            $hash = hash('sha256', $source->id.'|'.($normalizedTitle !== '' ? $normalizedTitle : Str::slug($item['title'])).'|'.parse_url($item['url'], PHP_URL_HOST));
 
-            if (News::where('source_url', $item['url'])->orWhere('content_hash', $hash)->exists()) {
+            $exists = News::where('source_url', $item['url'])
+                ->orWhere(fn ($q) => $q->where('source_id', $source->id)->where('content_hash', $hash))
+                ->exists();
+
+            if ($exists) {
                 continue;
             }
 

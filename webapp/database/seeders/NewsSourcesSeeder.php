@@ -80,10 +80,18 @@ class NewsSourcesSeeder extends Seeder
             [
                 'name' => 'Reuters',
                 'url' => 'https://www.reuters.com/',
-                'feed_url' => 'https://feeds.reuters.com/Reuters/worldNews',
+                'feed_url' => 'https://news.google.com/rss/search?q=site%3Areuters.com&hl=en-US&gl=US&ceid=US:en',
                 'locale' => 'en',
                 'fetch_type' => 'rss',
                 'category' => 'world',
+            ],
+            [
+                'name' => 'Investing.com',
+                'url' => 'https://www.investing.com/news/headlines',
+                'feed_url' => 'https://www.investing.com/rss/news.rss',
+                'locale' => 'en',
+                'fetch_type' => 'rss',
+                'category' => 'business',
             ],
             [
                 'name' => 'Thai PBS',
@@ -96,7 +104,7 @@ class NewsSourcesSeeder extends Seeder
             [
                 'name' => 'Bangkok Post',
                 'url' => 'https://www.bangkokpost.com/',
-                'feed_url' => 'https://www.bangkokpost.com/rss/topstories.xml',
+                'feed_url' => 'https://www.bangkokpost.com/rss/data/topstories.xml',
                 'locale' => 'en',
                 'fetch_type' => 'rss',
                 'category' => 'general',
@@ -110,15 +118,18 @@ class NewsSourcesSeeder extends Seeder
                 'category' => 'general',
             ],
             [
-                'name' => 'Bloomberg Technology (API demo)',
-                'url' => 'https://newsapi.org/v2/top-headlines',
-                'feed_url' => 'https://newsapi.org/v2/top-headlines?sources=techcrunch',
+                'name' => 'TechCrunch',
+                'url' => 'https://techcrunch.com/',
                 'locale' => 'en',
-                'fetch_type' => 'api',
+                'fetch_type' => 'crawl',
                 'category' => 'technology',
                 'config' => [
-                    'api_key_header' => 'X-Api-Key',
-                    'params' => ['language' => 'en'],
+                    'selectors' => [
+                        'item' => 'h3.loop-card__title',
+                        'title' => 'a.loop-card__title-link',
+                        'link' => 'a.loop-card__title-link',
+                        'summary' => 'p',
+                    ],
                 ],
             ],
         ];

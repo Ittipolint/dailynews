@@ -196,11 +196,12 @@ class IngestionService
         $stored = [];
 
         foreach ($items as $item) {
-            $contentHash = hash('sha256', Str::lower(Str::slug($item['title'])).'|'.parse_url($item['link'], PHP_URL_HOST));
+            $normalizedTitle = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $item['title'])));
+            $contentHash = hash('sha256', $source->id.'|'.($normalizedTitle !== '' ? $normalizedTitle : Str::slug($item['title'])).'|'.parse_url($item['link'], PHP_URL_HOST));
             $sourceUrl = $this->normalizeUrl($item['link']);
 
             $exists = News::where('source_url', $sourceUrl)
-                ->orWhere('content_hash', $contentHash)
+                ->orWhere(fn ($q) => $q->where('source_id', $source->id)->where('content_hash', $contentHash))
                 ->exists();
 
             if ($exists) {

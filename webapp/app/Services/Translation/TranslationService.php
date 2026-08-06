@@ -68,7 +68,17 @@ class TranslationService
         $sourceLang = $news->lang ?: 'en';
 
         $existing = $news->translation($locale);
-        if ($existing && $existing->status === 'translated') {
+
+        // Guard against a stale/misplaced "translation" that is actually just a
+        // verbatim copy of the original content (created while the article was
+        // wrongly tagged as the target language). In that case, re-translate
+        // instead of delivering untranslated text to the member.
+        $isStaleCopy = $existing
+            && $existing->status === 'translated'
+            && $locale !== $sourceLang
+            && trim((string) $existing->title) === trim((string) $news->title);
+
+        if ($existing && $existing->status === 'translated' && ! $isStaleCopy) {
             return $existing;
         }
 
@@ -92,48 +102,146 @@ class TranslationService
         }
     }
 
+    /**
+     * Ensure a Thai-ready translation exists for many news items at once.
+     * Articles that are already valid for the target locale are left untouched;
+     * the rest are translated in a single API call per batch, which drastically
+     * reduces the number of Gemini requests (staying within the free-tier quota).
+     */
+    public function translateBatch(iterable $news, string $locale): void
+    {
+        $pending = [];
+
+        foreach ($news as $item) {
+            $sourceLang = $item->lang ?: 'en';
+
+            $existing = $item->translation($locale);
+            $isStaleCopy = $existing
+                && $existing->status === 'translated'
+                && $locale !== $sourceLang
+                && trim((string) $existing->title) === trim((string) $item->title);
+
+            if ($existing && $existing->status === 'translated' && ! $isStaleCopy) {
+                continue;
+            }
+
+            if ($locale === $sourceLang) {
+                $this->copyOriginal($item, $locale);
+                continue;
+            }
+
+            $pending[$item->id] = $item;
+        }
+
+        if (empty($pending)) {
+            return;
+        }
+
+        // Translate in chunks to keep each prompt small yet use ~1 API call per chunk.
+        $chunkSize = max(1, (int) config('services.translation.batch_size', 8));
+
+        foreach (array_chunk($pending, $chunkSize, true) as $chunk) {
+            $this->translateToChunk($chunk, $locale);
+        }
+    }
+
     protected function translateTo(News $news, string $locale, string $sourceLang): array
     {
-        $driver = config('services.translation.driver', 'google');
-
-        if ($driver !== 'google') {
-            throw new \RuntimeException("Unsupported translation driver: {$driver}");
-        }
-
-        $payload = $this->googlePayload($news, $locale);
-
-        $apiKey = config('services.translation.api_key');
-        $model = config('services.translation.model', 'gemini-2.5-flash');
-
-        $response = Http::timeout(90)
-            ->withQueryParameters(['key' => $apiKey])
-            ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
-                'contents' => [
-                    [
-                        'parts' => [
-                            ['text' => $payload],
-                        ],
-                    ],
-                ],
-                'generationConfig' => [
-                    'temperature' => 0.2,
-                    'maxOutputTokens' => 8192,
-                ],
-            ]);
-
-        if (! $response->successful()) {
-            throw new \RuntimeException("Translation API error: {$response->status()} {$response->body()}");
-        }
-
-        $text = $response->json('candidates.0.content.parts.0.text');
-
-        if (! $text) {
-            throw new \RuntimeException('Empty translation response');
-        }
-
+        $text = $this->callGenerateContent($this->googlePayload($news, $locale));
         [$title, $summary, $body] = $this->parseTranslated($text);
 
         return $this->storeTranslation($news, $locale, $title, $summary, $body);
+    }
+
+    protected function translateToChunk(array $chunk, string $locale): void
+    {
+        $text = $this->callGenerateContent($this->googleBatchPayload($chunk, $locale));
+
+        foreach ($this->parseBatchTranslated($text, array_keys($chunk)) as $id => $parts) {
+            $news = $chunk[$id] ?? null;
+            if (! $news) {
+                continue;
+            }
+            [$title, $summary, $body] = $parts;
+            $this->storeTranslation($news, $locale, $title, $summary, $body);
+        }
+    }
+
+    /**
+     * Call the Gemini generateContent endpoint with retry + backoff on the
+     * free-tier rate limit (HTTP 429), honouring the returned retry delay.
+     */
+    protected function callGenerateContent(string $payload): string
+    {
+        $apiKey = config('services.translation.api_key');
+        $model = config('services.translation.model', 'gemini-2.5-flash');
+        $attempts = 0;
+        $maxAttempts = (int) config('services.translation.retry_attempts', 3);
+
+        do {
+            $attempts++;
+
+            $response = Http::timeout(90)
+                ->withQueryParameters(['key' => $apiKey])
+                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
+                    'contents' => [
+                        [
+                            'parts' => [
+                                ['text' => $payload],
+                            ],
+                        ],
+                    ],
+                    'generationConfig' => [
+                        'temperature' => 0.2,
+                        'maxOutputTokens' => 8192,
+                    ],
+                ]);
+
+            if ($response->successful()) {
+                $text = $response->json('candidates.0.content.parts.0.text');
+
+                if ($text) {
+                    return (string) $text;
+                }
+
+                throw new \RuntimeException('Empty translation response');
+            }
+
+            if ($response->status() === 429) {
+                $body = $response->json();
+                $retryDelay = $this->retryDelayFrom($body);
+
+                Log::channel('translation')->warning('Translation rate limited, backing off', [
+                    'attempt' => $attempts,
+                    'retry_in' => $retryDelay,
+                ]);
+
+                if ($attempts >= $maxAttempts) {
+                    throw new \RuntimeException("Translation rate limit exceeded: {$response->status()} {$response->body()}");
+                }
+
+                sleep($retryDelay);
+
+                continue;
+            }
+
+            throw new \RuntimeException("Translation API error: {$response->status()} {$response->body()}");
+        } while (true);
+    }
+
+    protected function retryDelayFrom(?array $body): int
+    {
+        if (! $body) {
+            return 30;
+        }
+
+        foreach (($body['error']['details'] ?? []) as $detail) {
+            if (isset($detail['retryDelay'])) {
+                return (int) preg_replace('/[^0-9]/', '', (string) $detail['retryDelay']) ?: 30;
+            }
+        }
+
+        return 30;
     }
 
     protected function googlePayload(News $news, string $locale): string
@@ -151,6 +259,95 @@ class TranslationService
             ."--- TITLE ---\n{$news->title}\n"
             ."--- SUMMARY ---\n".($news->summary ?? '')."\n"
             ."--- BODY ---\n".($news->body ?? '')."\n";
+    }
+
+    /**
+     * Build a single prompt that asks the model to translate several articles
+     * at once, keyed by numeric ID, so multiple news items share one API call.
+     */
+    protected function googleBatchPayload(array $chunk, string $locale): string
+    {
+        $localeName = [
+            'th' => 'Thai',
+            'en' => 'English',
+            'zh' => 'Chinese',
+        ][$locale];
+
+        $articles = '';
+        foreach ($chunk as $id => $news) {
+            $articles .= "[{$id}]\n"
+                ."TITLE: {$news->title}\n"
+                ."SUMMARY: ".($news->summary ?? '')."\n"
+                ."BODY: ".($news->body ?? '')."\n\n";
+        }
+
+        return "You are a professional news translator. Translate each of the following news articles into {$localeName}. "
+            ."Keep the meaning faithful, preserve proper nouns where appropriate, and use natural journalistic language. "
+            ."Return ONLY a JSON object where each key is the article id and each value is an object with keys: title, summary, body. "
+            ."Do not wrap in markdown code fences. Include every article id.\n\n"
+            .$articles;
+    }
+
+    /**
+     * Parse a batch response into [news_id => [title, summary, body], ...].
+     * Falls back to treating any single JSON object as one article's translation.
+     */
+    protected function parseBatchTranslated(string $text, array $ids): array
+    {
+        $text = trim($text);
+        $text = preg_replace('/^```(?:json)?\s*/i', '', $text);
+        $text = preg_replace('/\s*```$/', '', $text);
+
+        $decoded = json_decode($text, true);
+
+        if (is_array($decoded) && count($decoded) > 0) {
+            $out = [];
+
+            foreach ($decoded as $key => $item) {
+                if (! is_array($item) || ! isset($item['title'])) {
+                    continue;
+                }
+
+                $resolved = in_array((string) $key, $ids, true) ? (string) $key : $this->firstKnownId($key, $ids);
+
+                if ($resolved !== null) {
+                    $out[$resolved] = [
+                        (string) ($item['title'] ?? ''),
+                        (string) ($item['summary'] ?? ''),
+                        (string) ($item['body'] ?? ''),
+                    ];
+                }
+            }
+
+            if ($out) {
+                return $out;
+            }
+
+            // Single-object response (model collapsed the batch).
+            if (isset($decoded['title'])) {
+                $id = $ids[0] ?? null;
+                if ($id !== null) {
+                    return [$id => [
+                        (string) ($decoded['title'] ?? ''),
+                        (string) ($decoded['summary'] ?? ''),
+                        (string) ($decoded['body'] ?? ''),
+                    ]];
+                }
+            }
+        }
+
+        return [];
+    }
+
+    protected function firstKnownId(string $key, array $ids): ?string
+    {
+        foreach ($ids as $id) {
+            if (str_contains((string) $key, (string) $id)) {
+                return (string) $id;
+            }
+        }
+
+        return null;
     }
 
     protected function parseTranslated(string $text): array

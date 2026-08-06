@@ -46,8 +46,6 @@ Route::middleware('auth')->group(function (): void {
             ->except(['show']);
         Route::patch('members/{member}/toggle', [\App\Http\Controllers\Admin\MemberController::class, 'toggle'])
             ->name('members.toggle');
-        Route::post('members/{member}/send-news', [\App\Http\Controllers\Admin\MemberController::class, 'sendNews'])
-            ->name('members.send-news');
 
         // Member channels / interests / schedules
         Route::get('members/{member}/channels', [\App\Http\Controllers\Admin\MemberChannelController::class, 'index'])
@@ -70,14 +68,22 @@ Route::middleware('auth')->group(function (): void {
             ->name('members.schedules.index');
         Route::post('members/{member}/schedules', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'store'])
             ->name('members.schedules.store');
+        Route::get('schedules/{schedule}/edit', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'edit'])
+            ->name('members.schedules.edit');
         Route::patch('schedules/{schedule}', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'update'])
             ->name('members.schedules.update');
         Route::delete('schedules/{schedule}', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'destroy'])
             ->name('members.schedules.destroy');
+        Route::post('schedules/{schedule}/send-news', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'sendNews'])
+            ->name('members.schedules.send-news');
 
         // News search (Admin only)
         Route::get('news', [\App\Http\Controllers\Admin\NewsSearchController::class, 'index'])
             ->name('news.index');
+        Route::post('news/destroy-many', [\App\Http\Controllers\Admin\NewsSearchController::class, 'destroyMany'])
+            ->name('news.destroy-many');
+        Route::post('news/destroy-by-filter', [\App\Http\Controllers\Admin\NewsSearchController::class, 'destroyByFilter'])
+            ->name('news.destroy-by-filter');
 
         // Dashboard data endpoints (JSON, for charts)
         Route::get('dashboard/stats', [\App\Http\Controllers\Admin\DashboardController::class, 'stats'])

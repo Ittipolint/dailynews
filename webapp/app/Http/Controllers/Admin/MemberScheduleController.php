@@ -9,6 +9,8 @@ use App\Models\AuditLog;
 use App\Models\Category;
 use App\Models\Member;
 use App\Models\MemberSchedule;
+use App\Services\Delivery\DeliveryService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -42,6 +44,15 @@ class MemberScheduleController extends Controller
         return redirect()->route('admin.members.schedules.index', $member)->with('success', 'เพิ่มตารางเวลาส่งข่าวเรียบร้อย');
     }
 
+    public function edit(MemberSchedule $schedule): View
+    {
+        return view('admin.members.schedules_form', [
+            'schedule' => $schedule,
+            'member' => $schedule->member,
+            'categories' => Category::where('is_active', true)->orderBy('name')->get(),
+        ]);
+    }
+
     public function update(Request $request, MemberSchedule $schedule): RedirectResponse
     {
         $data = $this->validated($request);
@@ -55,6 +66,36 @@ class MemberScheduleController extends Controller
         AuditLog::record('member_schedule', 'update', (string) $schedule->id);
 
         return redirect()->route('admin.members.schedules.index', $schedule->member)->with('success', 'แก้ไขตารางเวลาเรียบร้อย');
+    }
+
+    /**
+     * Immediately deliver to this schedule's channels using its own news
+     * collection rules (categories, keyword interests, limit). Returns JSON
+     * for the schedule page "ส่งข่าว" button.
+     */
+    public function sendNews(MemberSchedule $schedule): JsonResponse
+    {
+        if ($schedule->member->is_active && ! $schedule->is_active) {
+            return response()->json(['ok' => false, 'error' => 'ตารางเวลานี้ถูกปิดใช้งาน'], 422);
+        }
+
+        $result = app(DeliveryService::class)->deliverScheduleNow($schedule);
+
+        if (! ($result['ok'] ?? false)) {
+            return response()->json(['ok' => false, 'error' => $result['error'] ?? 'ส่งข่าวไม่สำเร็จ'], 422);
+        }
+
+        AuditLog::record('member_schedule', 'send_news', (string) $schedule->id, null, [
+            'channels' => $result['channels'],
+            'news_count' => $result['news_count'],
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'news_count' => $result['news_count'],
+            'channels' => $result['channels'],
+            'results' => $result['results'],
+        ]);
     }
 
     protected function validated(Request $request): array

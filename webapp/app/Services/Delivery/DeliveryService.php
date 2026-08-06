@@ -165,16 +165,85 @@ class DeliveryService
         ];
     }
 
+    /**
+     * Immediately deliver to a schedule's configured channels using its own
+     * collection rules (categories, keyword interests, limit) — regardless of
+     * whether the cron time is currently due (admin "send news" button on the
+     * schedule page).
+     */
+    public function deliverScheduleNow(MemberSchedule $schedule): array
+    {
+        if (! $schedule->member->is_active) {
+            return ['ok' => false, 'error' => 'member inactive'];
+        }
+
+        $news = $this->collectNews($schedule);
+
+        if ($news->isEmpty()) {
+            return ['ok' => false, 'error' => 'no matching news'];
+        }
+
+        $this->ensureTranslations($news, $schedule->member->preferred_locale);
+
+        $results = [];
+        $channels = $schedule->channels ?: [];
+
+        foreach ($channels as $channelType) {
+            $memberChannel = $schedule->member->channels()
+                ->where('channel_type', $channelType)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $memberChannel) {
+                continue;
+            }
+
+            try {
+                $sent = $this->deliver($schedule->member, $memberChannel, $news);
+                $this->recordLog($schedule->member, $memberChannel, 'success', $news->pluck('id')->all(), null, $schedule->id);
+                $results[$channelType] = ['status' => 'success', 'sent' => $sent];
+            } catch (\Throwable $e) {
+                $this->recordLog($schedule->member, $memberChannel, 'failed', $news->pluck('id')->all(), $e->getMessage(), $schedule->id);
+                $results[$channelType] = ['status' => 'failed', 'error' => $e->getMessage()];
+                Log::channel('delivery')->error('Schedule send-now failed', [
+                    'schedule' => $schedule->id,
+                    'channel' => $channelType,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if (empty($results)) {
+            return ['ok' => false, 'error' => 'no active channels'];
+        }
+
+        return [
+            'ok' => true,
+            'news_count' => $news->count(),
+            'channels' => array_keys($results),
+            'results' => $results,
+        ];
+    }
+
     protected function ensureTranslations(iterable $news, ?string $locale): void
     {
         if (! $locale) {
             return;
         }
 
-        $translation = app(TranslationService::class);
+        $items = is_array($news) ? collect($news) : $news;
 
-        foreach ($news as $item) {
-            $translation->translateForLocale($item, $locale);
+        try {
+            app(TranslationService::class)->translateBatch($items, $locale);
+        } catch (\Throwable $e) {
+            // Never let a translation failure block delivery. When the
+            // translation provider is unavailable (e.g. rate-limited), fall
+            // back to sending the original-language content rather than
+            // failing the whole send.
+            Log::channel('delivery')->warning('Translation skipped, sending original', [
+                'locale' => $locale,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -184,7 +253,13 @@ class DeliveryService
             ->where('published_at', '>=', now()->subHours(24));
 
         if (! empty($schedule->categories)) {
-            $query->whereIn('category', $schedule->categories);
+            $query->where(function ($q) use ($schedule): void {
+                foreach ($schedule->categories as $category) {
+                    // news.category stores a comma-separated list of category
+                    // codes, so an exact match would always fail. Use FIND_IN_SET.
+                    $q->orWhereRaw('FIND_IN_SET(?, category)', [$category]);
+                }
+            });
         }
 
         $interests = $schedule->member->interests()->where('is_active', true)->get();
@@ -265,12 +340,15 @@ class DeliveryService
         $payload = 'broadcast';
         $label = 'broadcast';
 
-        if ($userId) {
+        // A valid LINE push recipient is a userId (starts with "U"). Basic IDs
+        // (e.g. "@dailynews") or any other value are not recipients — in that
+        // case fall back to broadcasting to every follower of the OA account.
+        if ($userId && str_starts_with($userId, 'U')) {
             $endpoint = 'https://api.line.me/v2/bot/message/push';
             $payload = ['to' => $userId, 'messages' => array_slice($messages, 0, 5)];
             $label = 'push';
         } else {
-            // No recipient ID: broadcast to every follower of the LINE OA account.
+            // No valid recipient ID: broadcast to every follower of the LINE OA account.
             $endpoint = 'https://api.line.me/v2/bot/message/broadcast';
             $payload = ['messages' => array_slice($messages, 0, 5)];
         }

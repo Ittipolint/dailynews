@@ -139,8 +139,18 @@ class GraphRagService
                 'error' => $e->getMessage(),
             ]);
 
+            // Fallback: return matched news titles so the search still works
+            // when the LLM is unavailable (e.g. API quota exhausted).
+            $titles = collect($this->parseContextTitles($context))->map(
+                fn ($t, $i) => "[{$i}] {$t}"
+            )->implode("\n");
+
+            $answer = $titles !== ''
+                ? "พบข่าวที่เกี่ยวข้องดังนี้:\n{$titles}"
+                : 'ขออภัย ไม่สามารถประมวลผลคำถามได้ในขณะนี้ โปรดลองใหม่อีกครั้ง';
+
             return [
-                'answer' => 'ขออภัย ไม่สามารถประมวลผลคำถามได้ในขณะนี้ โปรดลองใหม่อีกครั้ง',
+                'answer' => $answer,
                 'fallback' => true,
             ];
         }
@@ -172,8 +182,31 @@ class GraphRagService
 
         $tokens = preg_split('/[\s,\.!\?\n]+/u', Str::lower($question)) ?: [];
 
-        return array_values(array_unique(array_filter($tokens, function (string $token) use ($stopwords): bool {
-            return mb_strlen($token) > 2 && ! in_array($token, $stopwords, true);
-        })));
+        $keywords = [];
+        foreach ($tokens as $token) {
+            $token = trim($token);
+            if ($token === '' || mb_strlen($token) <= 2 || in_array($token, $stopwords, true)) {
+                continue;
+            }
+
+            $keywords[] = $token;
+
+            // Thai / CJK scripts have no spaces between words, so the whole
+            // sentence becomes a single token. Slide a character n-gram window
+            // over it so substrings (e.g. the actual key word) still match.
+            if (preg_match('/[\x{E00}-\x{E7F}\x{4E00}-\x{9FFF}\x{3040}-\x{30FF}]/u', $token)) {
+                $len = mb_strlen($token);
+                $added = 0;
+                for ($i = 0; $i <= $len - 4 && $added < 30; $i++) {
+                    $gram = mb_substr($token, $i, 4);
+                    if (! in_array($gram, $keywords, true)) {
+                        $keywords[] = $gram;
+                        $added++;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($keywords));
     }
 }

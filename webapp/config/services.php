@@ -8,6 +8,8 @@ return [
         'driver' => env('TRANSLATION_DRIVER', 'google'),
         'api_key' => env('GOOGLE_GEMINI_API_KEY'),
         'model' => env('GOOGLE_GEMINI_MODEL', 'gemini-2.5-flash'),
+        'batch_size' => (int) env('TRANSLATION_BATCH_SIZE', 5),
+        'retry_attempts' => (int) env('TRANSLATION_RETRY_ATTEMPTS', 3),
     ],
 
     'llm' => [

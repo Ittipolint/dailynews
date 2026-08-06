@@ -36,18 +36,18 @@
                 <div class="col-md-12 d-none" id="sch-dow-wrap">
                     <label class="form-label">เลือกวัน</label>
                     <div class="d-flex gap-2 flex-wrap" id="sch-dow">
-                        <div class="form-check"><input type="checkbox" class="form-check-input sch-dow-cb" value="1"><label class="form-check-label">จ</label></div>
-                        <div class="form-check"><input type="checkbox" class="form-check-input sch-dow-cb" value="2"><label class="form-check-label">อ</label></div>
-                        <div class="form-check"><input type="checkbox" class="form-check-input sch-dow-cb" value="3"><label class="form-check-label">พ</label></div>
-                        <div class="form-check"><input type="checkbox" class="form-check-input sch-dow-cb" value="4"><label class="form-check-label">พฤ</label></div>
-                        <div class="form-check"><input type="checkbox" class="form-check-input sch-dow-cb" value="5"><label class="form-check-label">ศ</label></div>
-                        <div class="form-check"><input type="checkbox" class="form-check-input sch-dow-cb" value="6"><label class="form-check-label">ส</label></div>
-                        <div class="form-check"><input type="checkbox" class="form-check-input sch-dow-cb" value="0"><label class="form-check-label">อา</label></div>
+                        <div class="form-check"><input type="checkbox" name="sch_dow[]" class="form-check-input sch-dow-cb" value="1"><label class="form-check-label">จ</label></div>
+                        <div class="form-check"><input type="checkbox" name="sch_dow[]" class="form-check-input sch-dow-cb" value="2"><label class="form-check-label">อ</label></div>
+                        <div class="form-check"><input type="checkbox" name="sch_dow[]" class="form-check-input sch-dow-cb" value="3"><label class="form-check-label">พ</label></div>
+                        <div class="form-check"><input type="checkbox" name="sch_dow[]" class="form-check-input sch-dow-cb" value="4"><label class="form-check-label">พฤ</label></div>
+                        <div class="form-check"><input type="checkbox" name="sch_dow[]" class="form-check-input sch-dow-cb" value="5"><label class="form-check-label">ศ</label></div>
+                        <div class="form-check"><input type="checkbox" name="sch_dow[]" class="form-check-input sch-dow-cb" value="6"><label class="form-check-label">ส</label></div>
+                        <div class="form-check"><input type="checkbox" name="sch_dow[]" class="form-check-input sch-dow-cb" value="0"><label class="form-check-label">อา</label></div>
                     </div>
                 </div>
                 <div class="col-md-4 d-none" id="sch-dom-wrap">
                     <label class="form-label">วันของเดือน</label>
-                    <select id="sch-dom" class="form-select">
+                    <select id="sch-dom" name="sch_dom" class="form-select">
                         <option value="1">วันที่ 1</option>
                         <option value="2">วันที่ 2</option>
                         <option value="3">วันที่ 3</option>
@@ -174,6 +174,15 @@
                         </td>
                         <td><span class="badge {{ $schedule->is_active ? 'bg-success' : 'bg-secondary' }}">{{ $schedule->is_active ? 'Active' : 'Inactive' }}</span></td>
                         <td class="text-end">
+                            <a href="{{ route('admin.members.schedules.edit', $schedule) }}" class="btn btn-sm btn-outline-secondary" title="แก้ไขตารางเวลา">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <button type="button" class="btn btn-sm btn-outline-success send-news-btn"
+                                data-url="{{ route('admin.members.schedules.send-news', $schedule) }}"
+                                data-name="{{ $schedule->name }}"
+                                title="ส่งข่าวตามตารางเวลานี้ทันที">
+                                <i class="bi bi-send-fill"></i> ส่งข่าว
+                            </button>
                             <form action="{{ route('admin.members.schedules.destroy', $schedule) }}" method="POST" class="d-inline" onsubmit="return confirm('ลบตารางเวลานี้?')">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
@@ -237,6 +246,55 @@
     const catsBoxes = Array.from(document.querySelectorAll('input[name="categories[]"]'));
     if (catClear) catClear.addEventListener('click', () => catsBoxes.forEach(b => { b.checked = false; }));
     if (catAll) catAll.addEventListener('click', () => catsBoxes.forEach(b => { b.checked = true; }));
+})();
+
+(function () {
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.send-news-btn');
+        if (!btn) return;
+
+        const url = btn.dataset.url;
+        const name = btn.dataset.name;
+        const original = btn.innerHTML;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> ส่งข่าว...';
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'Accept': 'application/json'
+            }
+        })
+        .then(r => r.text().then(text => {
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { raw: text }; }
+            return { ok: r.ok, status: r.status, data };
+        }))
+        .then(({ ok, status, data }) => {
+            if (ok) {
+                alert('ส่งข่าว "' + name + '" เรียบร้อย (HTTP ' + status + ') จำนวน ' + data.news_count + ' ข่าว ไปยัง ' + (data.channels || []).join(', '));
+            } else {
+                let reason = data.error || (data.body && data.body.error) || data.raw || '';
+                if (!reason) {
+                    reason = status === 502
+                        ? 'เซิร์ฟเวอร์ไม่ตอบสนอง กรุณาลองใหม่'
+                        : 'HTTP ' + status;
+                }
+                alert('ส่งข่าว "' + name + '" ล้มเหลว: ' + reason);
+            }
+            window.location.reload();
+        })
+        .catch(err => {
+            alert('ส่งข่าว "' + name + '" ล้มเหลว: ' + err.message);
+            window.location.reload();
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        });
+    });
 })();
 </script>
 @endpush
