@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\News;
 use App\Models\NewsSource;
+use App\Services\Ingestion\CategoryClassifier;
 use App\Services\Ingestion\IngestionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,8 +50,18 @@ class IngestApiController extends Controller
         ]);
 
         $stored = [];
+        $configuredCategories = $this->configuredCategories($source);
+        $classifier = app(CategoryClassifier::class);
 
         foreach ($data['items'] as $item) {
+            // Assign the article its real category from its content and skip
+            // anything that does not match the source's configured categories.
+            $category = $classifier->classify($item['title'], $item['summary'] ?? null);
+
+            if ($configuredCategories !== [] && ! in_array($category, $configuredCategories, true)) {
+                continue;
+            }
+
             $normalizedTitle = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $item['title'])));
             $hash = hash('sha256', $source->id.'|'.($normalizedTitle !== '' ? $normalizedTitle : Str::slug($item['title'])).'|'.parse_url($item['url'], PHP_URL_HOST));
 
@@ -67,7 +78,7 @@ class IngestApiController extends Controller
                 'source_url' => $item['url'],
                 'title' => $item['title'],
                 'summary' => $item['summary'] ?? null,
-                'category' => $source->category,
+                'category' => $category,
                 'lang' => $source->locale ?: 'en',
                 'content_hash' => $hash,
                 'status' => 'new',
@@ -84,5 +95,16 @@ class IngestApiController extends Controller
         ]);
 
         return response()->json(['stored' => count($stored), 'data' => $stored]);
+    }
+
+    protected function configuredCategories(NewsSource $source): array
+    {
+        $raw = trim((string) $source->category);
+
+        if ($raw === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', $raw))));
     }
 }

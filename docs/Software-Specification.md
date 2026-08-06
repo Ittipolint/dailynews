@@ -1,11 +1,11 @@
 # Software Specification — ระบบ DailyNews
 
-**เวอร์ชัน:** 1.2
+**เวอร์ชัน:** 1.3
 **วันที่:** 6 สิงหาคม 2026
 **ผู้จัดทำ:** ทีมออกแบบระบบ IT (ตามเอกสาร Requirement Specification)
 **สถานะ:** อนุมัติเพื่อใช้เป็นแนวทางพัฒนา (ปรับปรุงให้ตรงกับระบบที่พัฒนาจริง/Production)
 
-> **หมายเหตุฉบับ 1.2:** เอกสารนี้ปรับปรุงจาก 1.1 (3 ส.ค. 2026) ให้ตรงกับสถานะระบบจริงใน Production ณ วันที่ 6 ส.ค. 2026 โดยแก้ไขส่วนที่เคยระบุแบบในอุดมคติ (PostgreSQL main DB, Neo4j Graph, pgvector, Redis, Metabase, Docker ใน Production, translation/delivery ผ่าน n8n) ให้เป็นสถานะที่ทำงานจริง ดูหัวข้อ [3. เทคโนโลยีที่ใช้](#3-เทคโนโลยีที่ใช้-technology-stack) [4. สถาปัตยกรรม](#4-สถาปัตยกรรมระบบ-system-architecture) และ [ส่วน n8n / Docker](#ระบบ-background-workflow-n8n) สำหรับรายละเอียด
+> **หมายเหตุฉบับ 1.3:** ปรับปรุงจาก 1.2 (6 ส.ค. 2026) เพิ่มการจัดหมวดหมู่ข่าวอัตโนมัติตามเนื้อหา (CategoryClassifier) และการกรองข่าวตามหมวดหมู่ที่ตั้งค่าของแต่ละแหล่งข่าวระหว่างขั้นตอน ingestion ดูหัวข้อ [2.1.3](#213-เก็บข้อมูลข่าวลงฐานข้อมูล) และ [2.1.4](#214-การจัดหมวดหมู่และกรองข่าวตามหมวดหมู่)
 
 ---
 
@@ -75,10 +75,18 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 - n8n ดึงข่าวแล้ว push มาที่ `POST /api/ingest/push` หรือ Laravel เรียก `dailynews:ingest` → `IngestionService` mapping เป็นโครงสร้างมาตรฐานแล้วบันทึก
 - **Deduplication** อ้างอิงจาก `source_url` (unique) + `content_hash` (indexed)
 - ข้อมูลข่าวเก็บ: title, summary, body, source_id, category, tags (json), thumbnail, lang, sentiment, is_breaking, published_at, fetched_at, source_url
+- **การจัดหมวดหมู่ข่าวอัตโนมัติ (CategoryClassifier):** ทุกรายการที่รับเข้า (ทั้งผ่าน `IngestApiController::push` จาก n8n และ `IngestionService::storeItems` จาก `dailynews:ingest`) ผ่าน `App\Services\Ingestion\CategoryClassifier::classify($title, $summary)` เพื่อจัดหมวดหมู่จากเนื้อหาจริง (keyword EN+TH) ก่อนบันทึก — ครอบคลุม 9 หมวด: business, entertainment, general, health, politics, science, sports, technology, world; ถ้าจับคู่ไม่ได้ fallback เป็น `general`
+- **การกรองตามหมวดหมู่ของแหล่งข่าว:** ระบบอ่านหมวดหมู่ที่ตั้งไว้ใน `news_sources.category` (ค่าเป็น comma-separated list) แล้วเก็บเฉพาะรายการที่ `CategoryClassifier` จัดหมวดได้ตรงกับรายการใดรายการหนึ่ง; รายการที่ไม่ตรงจะถูก **ตัดทิ้ง (ไม่บันทึก)** — เช่น Thai PBS ตั้ง category = `technology` → ระบบจะเก็บเฉพาะข่าวที่จัดเป็น `technology` เท่านั้น (ดู 2.1.4)
 - การดึงเป็นแบบ incremental (เฉพาะรายการใหม่); รองรับ retry เมื่อเกิดข้อผิดพลาด
 - กลไกการดึง: **Laravel scheduled job `dailynews:ingest` (ทุก 1 ชั่วโมง)** เป็นตัวหลัก; n8n ingest workflow มีใน repo แต่ถูกตั้งเป็น inactive ใน prod
 
-#### 2.1.4 การแปลข่าวเป็น 3 ภาษาหลัก
+#### 2.1.4 การจัดหมวดหมู่และกรองข่าวตามหมวดหมู่ (Category Classification & Filtering)
+- **ที่มา:** เดิม `News.category` ถูกเขียนด้วยค่า `$source->category` ตรง ๆ (ซึ่งเป็น comma-list ครอบเกือบทุกหมวด เช่น `business,entertainment,general,...,sports,technology,world`) ทำให้การกรองข่าวตามหมวดหมู่ไร้ความหมาย เนื่องจากทุกข่าวได้หมวดตาม list ทั้งหมดของ source
+- **พฤติกรรมใหม่:** ตอนบันทึกทุก item จะคำนวณ `category` จากเนื้อหาจริงผ่าน `CategoryClassifier` (น้ำหนัก keyword: title 2-3, summary 1-2, คำยาวมีน้ำหนักมากกว่า; ภาษาไทย+อังกฤษ; fallback `general`) และ `configuredCategories($source)` จะ split ค่า `news_sources.category` ด้วย `,` — ถ้า list ไม่ว่างและหมวดที่คำนวณไม่อยู่ใน list จะ **skip (ไม่บันทึก)** item นั้น
+- **ผลจริงใน Production:** แหล่งข่าว Thai PBS (crawl) ตั้ง category = `technology` + URL หน้าเทคโนโลยี → เมื่อ Fetch Now ระบบเก็บได้เฉพาะบทความที่จัดเป็น `technology` (เช่น SONP, TechForge 2026) และตัดข่าวอวกาศ/ดาราศาสตร์ที่จัดเป็น `science` ทิ้งโดยอัตโนมัติ (ยืนยันจาก ingest log `stored:2` และ admin news filter)
+- **ข้อควรทราบ:** แหล่งข่าว RSS/API ทั่วไปที่ต้องการรับข่าวทุกหมวด ควรตั้ง category ครอบครบทุกรายการที่มี (หรือปล่อยว่าง) เพื่อไม่ให้ถูกกรองออก
+
+#### 2.1.5 การแปลข่าวเป็น 3 ภาษาหลัก
 - ระบบแปลข่าวจากภาษาต้นทางเป็นไทย (th), อังกฤษ (en), จีน (zh)
 - กลไกการแปล: **TranslationService (Google Gemini LLM, model `gemini-2.5-flash`)** ทำงานเป็น background job หลังการดึงข่าว
 - **การทำงานจริง: Laravel scheduled job `dailynews:translate` (ทุก 1 ชั่วโมง, `--limit=20`)** เป็นตัวดำเนินการหลัก; n8n translate workflow มีใน repo แต่ inactive (ทำหน้าที่ health check เท่านั้น)
@@ -87,7 +95,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 - รองรับ batch translation (TRANSLATION_BATCH_SIZE=5) และ retry (TRANSLATION_RETRY_ATTEMPTS=3) + backoff
 - **ข้อจำกัด (พบจริง)**: Gemini free tier quota จำกัด 20 request/model/วัน → เมื่อหมด quota การแปลจะ "ข้ามแล้วใช้ต้นฉบับ" (translate-on-delivery fallback) หรือ fail แล้วรอ retry รอบถัดไป
 
-#### 2.1.5 หน้าจอ Chat สำหรับค้นหาข่าวย้อนหลัง (AI Graph RAG)
+#### 2.1.6 หน้าจอ Chat สำหรับค้นหาข่าวย้อนหลัง (AI Graph RAG)
 - มีหน้าจอ Chat (`GET /chat` + `POST /chat/ask`) สำหรับผู้ใช้ที่ login ค้นหาข่าวย้อนหลังด้วยภาษาธรรมชาติ
 - **การทำงานจริง (ณ ส.ค. 2026) ใช้ "RAG แบบเบา" (keyword + entity retrieval) ไม่ใช่ Graph DB จริง:**
   - `GraphRagService::retrieve()` ค้นหาจาก `title/summary/body` + `news_translations` ด้วย SQL LIKE บน keyword และ entity ที่สกัดจากคำถาม (หยุดคำภาษาไทย/อังกฤษ)
@@ -97,7 +105,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
   - Response ประกอบด้วย `answer`, `sources[]` (id, title, url, source, published_at, relevance), `entities`, `keywords`
 - ยังไม่มี: จริง ๆ ไม่มี pgvector/embedding/Neo4j ต่อในเวิร์กโฟลว์นี้ (config มี NEO4J_* และ EMBEDDING_* ไว้ แต่ `GraphRagService` ไม่ได้เรียกใช้) — ถือเป็นส่วน "เตรียมโครงสร้าง" สำหรับ Phase 2
 
-#### 2.1.6 Idea เพิ่มเติม (เพิ่มเติมจาก Requirement)
+#### 2.1.7 Idea เพิ่มเติม (เพิ่มเติมจาก Requirement)
 - **หมวดหมู่และแท็กข่าวอัตโนมัติ** — ระบบจัดหมวดหมู่ข่าว (การเมือง เศรษฐกิจ เทคโนโลยี กีฬา ฯลฯ) และแท็กอัตโนมัติด้วย NLP เพื่อช่วยสมาชิกเลือกหัวข้อที่สนใจ
 - **การตรวจจับข่าวซ้ำและคุณภาพข่าว** — กรองข่าวซ้ำและข่าวคุณภาพต่ำ (low-quality, duplicate, spam)
 - **การตั้ง keyword filter** — กรองข่าวที่ไม่ต้องการ (keyword blocklist) ระดับระบบและระดับสมาชิก
@@ -315,7 +323,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 
 ### 5.1 ฐานข้อมูลหลัก: MySQL/MariaDB (`ittipolint_dailynews`) — ตาม `DB_CONNECTION=mysql`
 ตารางแอปพลิเคชัน (สร้างโดย migration `2026_08_01_000001_create_dailynews_core_tables.php`):
-- `news_sources` — id, name, slug, url, locale, fetch_type (rss/api/crawl), feed_url, cron_expression, credentials (json), config (json), category, is_active, last_fetched_at, last_status, last_error, timestamps, deleted_at
+- `news_sources` — id, name, slug, url, locale, fetch_type (rss/api/crawl), feed_url, cron_expression, credentials (json), config (json), category (comma-separated list ของหมวดที่ต้องการรับ; เอกสารจริงระบบกรองข่าวตามนี้ ผ่าน CategoryClassifier — ดู 2.1.4), is_active, last_fetched_at, last_status, last_error, timestamps, deleted_at
 - `categories` — id, code, name, is_active
 - `news` — id, source_id (FK), source_url (unique), title, summary, body, category, tags (json), thumbnail, lang, content_hash (dedup), status, sentiment, is_breaking, published_at, fetched_at
 - `news_translations` — id, news_id (FK), locale (th/en/zh), title, summary, body, status, error_message, translated_at; unique(news_id, locale)

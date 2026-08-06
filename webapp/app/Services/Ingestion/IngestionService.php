@@ -194,8 +194,20 @@ class IngestionService
     protected function storeItems(NewsSource $source, array $items): array
     {
         $stored = [];
+        $configuredCategories = $this->configuredCategories($source);
+        $classifier = app(CategoryClassifier::class);
 
         foreach ($items as $item) {
+            // Assign the article its real category based on its content, then
+            // drop anything that does not match the source's configured
+            // categories (when any are set). This prevents a general feed such
+            // as Thai PBS from being tagged "technology" for every story.
+            $category = $classifier->classify($item['title'], $item['summary'] ?? null);
+
+            if ($configuredCategories !== [] && ! in_array($category, $configuredCategories, true)) {
+                continue;
+            }
+
             $normalizedTitle = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $item['title'])));
             $contentHash = hash('sha256', $source->id.'|'.($normalizedTitle !== '' ? $normalizedTitle : Str::slug($item['title'])).'|'.parse_url($item['link'], PHP_URL_HOST));
             $sourceUrl = $this->normalizeUrl($item['link']);
@@ -213,7 +225,7 @@ class IngestionService
                 'source_url' => $sourceUrl,
                 'title' => $item['title'],
                 'summary' => $item['summary'] ?: null,
-                'category' => $source->category ?: $this->guessCategory($item['title']),
+                'category' => $category,
                 'lang' => $source->locale ?: 'en',
                 'content_hash' => $contentHash,
                 'status' => 'new',
@@ -227,27 +239,15 @@ class IngestionService
         return $stored;
     }
 
-    protected function guessCategory(string $title): string
+    protected function configuredCategories(NewsSource $source): array
     {
-        $keywords = [
-            'business' => ['economy', 'market', 'stock', 'business', 'finance'],
-            'technology' => ['tech', 'software', 'ai', 'cyber', 'digital', 'internet'],
-            'sports' => ['sport', 'football', 'olympic', 'league'],
-            'world' => ['world', 'international', 'diplomat', 'united nations'],
-            'politics' => ['politics', 'parliament', 'election', 'government'],
-        ];
+        $raw = trim((string) $source->category);
 
-        $lower = Str::lower($title);
-
-        foreach ($keywords as $category => $words) {
-            foreach ($words as $word) {
-                if (Str::contains($lower, $word)) {
-                    return $category;
-                }
-            }
+        if ($raw === '') {
+            return [];
         }
 
-        return 'general';
+        return array_values(array_filter(array_map('trim', explode(',', $raw))));
     }
 
     protected function headers(NewsSource $source): array

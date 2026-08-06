@@ -122,7 +122,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body) ? raw.body : raw;\nconst articles = payload.articles || payload.data || payload.results || [];\n\nconst items = articles.map(a => ({\n  title: a.title,\n  url: a.url || a.link,\n  summary: a.description || a.summary || '',\n  published_at: a.publishedAt || a.published_at || null\n}));\n\nif (items.length === 0) return [];\n\nreturn [{ json: {\n  source: $('Extract Source').item.json.source.slug,\n  items: items\n} }];"
+        "jsCode": "const raw = $input.first().json;\nconst payload = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body) ? raw.body : raw;\n\n// AP News GraphQL (ContentPageQuery) fallback\nconst pagePromos = [];\nfunction walk(o) {\n  if (!o || typeof o !== 'object') return;\n  if (o.__typename === 'PagePromo') { pagePromos.push(o); return; }\n  for (const k of Object.keys(o)) { if (k === '__typename') continue; walk(o[k]); }\n}\nconst screen = payload.data && payload.data.Screen;\nif (screen && typeof screen === 'object') walk(screen);\n\nlet articles = [];\nif (pagePromos.length) {\n  articles = pagePromos;\n} else {\n  articles = payload.articles || payload.data || payload.results || [];\n}\n\nconst items = articles.map(a => {\n  let pub = a.publishedAt || a.published_at || null;\n  if (!pub && a.publishDateStamp) pub = new Date(a.publishDateStamp).toISOString();\n  return {\n    title: a.title,\n    url: a.url || a.link,\n    summary: a.description || a.summary || '',\n    published_at: pub\n  };\n});\n\nif (items.length === 0) return [];\n\nreturn [{ json: {\n  source: $('Extract Source').item.json.source.slug,\n  items: items\n} }];"
       },
       "id": "code-normalize-api",
       "name": "Normalize API Data",
@@ -146,6 +146,138 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1200, 240],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tjTHYNN0eR5OYkDc",
+          "name": "DailyNews API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.source.fetch_type }}",
+              "rightValue": "crawl",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-crawl",
+      "name": "Is Crawl Source?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.source.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "string"
+            }
+          }
+        }
+      },
+      "id": "http-crawl-fetch",
+      "name": "Crawl Fetch HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst html = (raw && typeof raw === 'object' && raw.body) ? raw.body : (raw || '');\nreturn [{ json: { html: String(html), source: $('Extract Source').item.json.source } }];"
+      },
+      "id": "code-prep-crawl",
+      "name": "Prep Crawl HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 480]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "sourceData": "json",
+        "dataPropertyName": "html",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "title",
+              "cssSelector": "={{ $json.source.config.selectors.title || 'a' }}",
+              "returnValue": "attribute",
+              "attribute": "data-title",
+              "returnArray": true
+            },
+            {
+              "key": "titleText",
+              "cssSelector": "={{ $json.source.config.selectors.title || 'a' }}",
+              "returnValue": "text",
+              "returnArray": true
+            },
+            {
+              "key": "link",
+              "cssSelector": "={{ $json.source.config.selectors.link || 'a' }}",
+              "returnValue": "attribute",
+              "attribute": "data-url",
+              "returnArray": true
+            },
+            {
+              "key": "linkHref",
+              "cssSelector": "={{ $json.source.config.selectors.link || 'a' }}",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "html-extract-crawl",
+      "name": "Extract Crawl Items",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 2,
+      "position": [1200, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst titleArr = Array.isArray(j.title) ? j.title : [];\nconst titleTextArr = Array.isArray(j.titleText) ? j.titleText : [];\nconst linkArr = Array.isArray(j.link) ? j.link : [];\nconst hrefArr = Array.isArray(j.linkHref) ? j.linkHref : [];\nconst source = $('Extract Source').item.json.source;\nconst base = source.url || source.feed_url || '';\nlet baseOrigin = '';\nconst m = String(base).match(/^(https?:\\/\\/[^/]+)/i);\nif (m) baseOrigin = m[1];\nconst count = Math.max(titleArr.length, linkArr.length, titleTextArr.length, hrefArr.length);\nconst items = [];\nfor (let i = 0; i < count; i++) {\n  let title = String(titleArr[i] || titleTextArr[i] || '').trim();\n  let link = String(linkArr[i] || hrefArr[i] || '').trim();\n  if (!title || !link) continue;\n  if (link.startsWith('//')) link = 'https:' + link;\n  else if (link.startsWith('/') && baseOrigin) link = baseOrigin + link;\n  else if (!/^https?:/i.test(link) && baseOrigin) link = baseOrigin + '/' + link.replace(/^\\/+/g, '');\n  if (!/^https?:\\/\\//i.test(link)) continue;\n  if (/\\s/.test(link)) continue;\n  items.push({ title, url: link, summary: '', published_at: null });\n}\nconst seen = new Set();\nconst deduped = [];\nfor (const it of items) {\n  const k = (it.url + '|' + it.title).toLowerCase();\n  if (seen.has(k)) continue;\n  seen.add(k);\n  deduped.push(it);\n}\nif (!deduped.length) return [];\n\nconst htmlNode = $('Prep Crawl HTML');\nlet rawHtml = '';\nif (htmlNode && htmlNode.item && htmlNode.item.json) {\n  rawHtml = String(htmlNode.item.json.html || '');\n}\nif (rawHtml) {\n  for (const it of deduped) {\n    const urlIdx = rawHtml.indexOf(it.url);\n    if (urlIdx === -1) continue;\n    const before = rawHtml.slice(Math.max(0, urlIdx - 5000), urlIdx);\n    const stampMatch = before.match(/data-posted-date-timestamp=\"(\\d+)\"/);\n    if (stampMatch) {\n      it.published_at = new Date(parseInt(stampMatch[1])).toISOString();\n    }\n    const after = rawHtml.slice(urlIdx, urlIdx + 3000);\n    const summMatch = after.match(/<div class=\"PagePromo-description\">[\\s\\S]*?<span[^>]*class=\"[^\"]*PagePromoContentIcons-text[^\"]*\"[^>]*>([\\s\\S]*?)<\\/span>/);\n    if (summMatch && summMatch[1]) {\n      it.summary = summMatch[1].replace(/\\s+/g, ' ').trim();\n    }\n  }\n}\n\nreturn [{ json: {\n  source: source.slug,\n  items: deduped\n} }];"
+      },
+      "id": "code-build-crawl",
+      "name": "Build Crawl Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ittipolint-sbu.veya.co.th/dailynews/api/ingest/push",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "http-push-crawl",
+      "name": "Push Crawl to DailyNews",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 480],
       "credentials": {
         "httpHeaderAuth": {
           "id": "tjTHYNN0eR5OYkDc",
@@ -188,7 +320,69 @@
         ],
         [
           {
+            "node": "Is Crawl Source?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Crawl Source?": {
+      "main": [
+        [
+          {
+            "node": "Crawl Fetch HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Call API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl Fetch HTML": {
+      "main": [
+        [
+          {
+            "node": "Prep Crawl HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Crawl HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Crawl Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Crawl Items": {
+      "main": [
+        [
+          {
+            "node": "Build Crawl Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Crawl Payload": {
+      "main": [
+        [
+          {
+            "node": "Push Crawl to DailyNews",
             "type": "main",
             "index": 0
           }
