@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -34,6 +35,8 @@ class LoginController extends Controller
         Auth::login($user, $request->boolean('remember'));
 
         $request->session()->regenerate();
+
+        Cookie::queue(Cookie::make('dailynews_last_login', $credentials['login'], 60 * 24 * 365, '/', null, false, false));
 
         return redirect()->intended(route('admin.dashboard'));
     }

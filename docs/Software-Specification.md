@@ -226,9 +226,10 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 #### 2.6.4 การจัดการผู้ใช้ (User Management) — เพิ่มเติมจาก Requirement
 - หน้าจอ `GET /admin/users` (เมนู "จัดการผู้ใช้") ให้ Admin เพิ่ม / แก้ไข / ลบผู้ใช้ระบบ
 - ฟิลด์: name, username (ใช้ล็อกอินได้), email (ใช้ล็อกอินได้), password (ตั้งใหม่ตอนเพิ่ม/แก้ไข; เว้นว่าง = ไม่เปลี่ยน), role (admin/staff/user), permissions (เฉพาะ role ที่ไม่ใช่ admin — กำหนดสิทธิ์ตามเมนูได้แก่ `dashboard/news/chat/sources/members/categories/credentials/users`)
-- ล็อกอิน (`/login`) ใช้ช่องเดียว "รหัสผู้ใช้ / อีเมล" โดยลอง match กับ `email` หรือ `username` แล้วตรวจรหัสผ่านด้วย `Hash::check`
+- ล็อกอิน (`/login`) ใช้ช่องเดียว "รหัสผู้ใช้ / อีเมล" โดยลอง match กับ `email` หรือ `username` แล้วตรวจรหัสผ่านด้วย `Hash::check`; เมื่อ login สำเร็จระบบจะจดจำค่า login ล่าสุดไว้ใน cookie `dailynews_last_login` (อายุ 1 ปี)
+- หลังกด Logoff แล้วกลับมาที่หน้า Login: ช่อง "รหัสผู้ใช้ / อีเมล" จะถูก pre-fill ด้วยค่า login ล่าสุดที่เคยใช้สำเร็จ (ทั้งแบบ email และ username) โดยอัตโนมัติ ส่วนช่องรหัสผ่านจะถูก clear เปล่าเสมอ (ระบบไม่เก็บรหัสผ่านใน cookie/session)
 - ออกจากระบบ (`POST /logout`, ปุ่ม **Logoff** สีแดงมุมขวาบนของ header + ปุ่ม "ออกจากระบบ" ใน sidebar) — เมื่อกดแล้วจะ logout, invalidate session, regenerate CSRF token แล้ว redirect กลับไปที่หน้า Login; หน้า Login เองไม่แสดงปุ่ม Logoff (มีเฉพาะตอน login แล้ว)
-- Guardrail เพิ่มเติม: ปุ่ม Logoff ส่ง `POST` พร้อม CSRF token (ไม่มี token → HTTP 419); หลัง logout แล้วทุกหน้าในระบบ redirect ไปหน้า Login
+- Guardrail เพิ่มเติม: ปุ่ม Logoff ส่ง `POST` พร้อม CSRF token (ไม่มี token → HTTP 419); หลัง logout แล้วทุกหน้าในระบบ redirect ไปหน้า Login; การ login ผิด (รหัสผ่านไม่ถูก) จะแสดง error และยังคง pre-fill ค่า login ที่พยายามไว้ (old input มาก่อน cookie)
 - บทบาท `admin` = เข้าถึงทุกเมนู (permissions ถูกบังคับเป็นเมนูทั้งหมดอัตโนมัติ); `staff` = ผู้ดูแลแต่ไม่ใช่ admin (ต้องกำหนด permissions); `user` = ผู้ใช้ทั่วไปตาม permissions
 - Guardrail: กันลบบัญชีตัวเอง, กันลบ/ลดสิทธิ์ผู้ดูแลระบบคนสุดท้าย (เหลือ admin < 1 ไม่ได้), Sidebar แสดงเฉพาะเมนูที่ผู้ใช้มีสิทธิ์
 - Seed ผู้ใช้เริ่มต้น (`UsersSeeder`): `ittipolint@gmail.com` (admin, ทุกเมนู, รหัสผ่านเดิมคงเดิม), `admin`/`10203040` (admin, ทุกเมนู), `user1`/`10203040` (user, `dashboard/news/chat`)

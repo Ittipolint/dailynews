@@ -11,14 +11,14 @@
                     @csrf
                     <div class="mb-3">
                         <label class="form-label">รหัสผู้ใช้ / อีเมล</label>
-                        <input type="text" name="login" class="form-control @error('login') is-invalid @enderror" value="{{ old('login') }}" required autofocus>
+                        <input type="text" name="login" class="form-control @error('login') is-invalid @enderror" value="{{ old('login', request()->cookie('dailynews_last_login')) }}" required autofocus autocomplete="username">
                         @error('login')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
                     <div class="mb-3">
                         <label class="form-label">รหัสผ่าน</label>
-                        <input type="password" name="password" class="form-control" required>
+                        <input type="password" name="password" class="form-control" required autocomplete="current-password">
                     </div>
                     <div class="form-check mb-3">
                         <input type="checkbox" name="remember" id="remember" class="form-check-input">
