@@ -1,0 +1,756 @@
+{
+  "name": "DailyNews - Ingest All Sources (unified)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "cron-ingest",
+      "name": "Run every 1 hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://ittipolint-sbu.veya.co.th/dailynews/api/v1/sources",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "http-sources",
+      "name": "Get Active Sources",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tjTHYNN0eR5OYkDc",
+          "name": "DailyNews API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst list = (Array.isArray(raw.data) ? raw.data : (raw.body && Array.isArray(raw.body.data) ? raw.body.data : []))\n  .filter(s => s.is_active === true || s.is_active === 1)\n  .map(s => ({ json: s }));\nreturn list;"
+      },
+      "id": "code-prepare",
+      "name": "Prepare Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "split-sources",
+      "name": "Loop Sources",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fetch_type }}",
+              "rightValue": "rss",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-rss",
+      "name": "Is RSS?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.feed_url || $json.url }}",
+        "options": {}
+      },
+      "id": "rss-read",
+      "name": "Parse RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        -304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Loop Sources').item.json;\nconst items = $input.all()\n  .filter(i => i.json.title && i.json.link)\n  .map(i => ({\n    title: i.json.title,\n    url: i.json.link,\n    summary: i.json.summary || i.json.description || i.json.contentSnippet || i.json.content || '',\n    published_at: i.json.pubDate || i.json.isoDate || null\n  }));\n\nreturn [{ json: { source: source.slug, items, has_items: items.length > 0 ? 'yes' : 'no' } }];"
+      },
+      "id": "code-build-rss",
+      "name": "Build RSS Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_items }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-rss-items",
+      "name": "RSS Has Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ittipolint-sbu.veya.co.th/dailynews/api/ingest/push",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "http-push-rss",
+      "name": "Push RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -304
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tjTHYNN0eR5OYkDc",
+          "name": "DailyNews API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fetch_type }}",
+              "rightValue": "api",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-api",
+      "name": "Is API?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.feed_url }}",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "http-api",
+      "name": "Call API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        112
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Loop Sources').item.json;\nconst raw = $input.first().json;\nconst payload = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body) ? raw.body : raw;\nconst articles = payload.articles || payload.data || payload.results || [];\nconst items = articles.map(a => ({\n  title: a.title,\n  url: a.url || a.link,\n  summary: a.description || a.summary || '',\n  published_at: a.publishedAt || a.published_at || null\n})).filter(i => i.title && i.url);\n\nreturn [{ json: { source: source.slug, items, has_items: items.length > 0 ? 'yes' : 'no' } }];"
+      },
+      "id": "code-build-api",
+      "name": "Build API Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_items }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-api-items",
+      "name": "API Has Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ittipolint-sbu.veya.co.th/dailynews/api/ingest/push",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "http-push-api",
+      "name": "Push API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        112
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tjTHYNN0eR5OYkDc",
+          "name": "DailyNews API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fetch_type }}",
+              "rightValue": "crawl",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-crawl",
+      "name": "Is Crawl?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        960,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "string"
+            }
+          }
+        }
+      },
+      "id": "http-crawl-html",
+      "name": "Crawl Fetch HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Loop Sources').item.json;\nconst raw = $input.first().json;\nconst html = (raw && typeof raw === 'object' && raw.body) ? raw.body : (raw || '');\nreturn [{ json: { html: String(html), source: source } }];"
+      },
+      "id": "code-prep-crawl",
+      "name": "Prep Crawl HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        304
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "html-extract-crawl",
+      "name": "Extract Crawl Items",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nconst titleArr = Array.isArray(j.title) ? j.title : [];\nconst titleTextArr = Array.isArray(j.titleText) ? j.titleText : [];\nconst linkArr = Array.isArray(j.link) ? j.link : [];\nconst hrefArr = Array.isArray(j.linkHref) ? j.linkHref : [];\nconst source = $('Loop Sources').item.json;\nconst base = source.url || source.feed_url || '';\nlet baseOrigin = '';\nconst m = String(base).match(/^(https?:\\/\\/[^/]+)/i);\nif (m) baseOrigin = m[1];\nconst count = Math.max(titleArr.length, linkArr.length, titleTextArr.length, hrefArr.length);\nconst items = [];\nfor (let i = 0; i < count; i++) {\n  let title = String(titleArr[i] || titleTextArr[i] || '').trim();\n  let link = String(linkArr[i] || hrefArr[i] || '').trim();\n  if (!title || !link) continue;\n  if (link.startsWith('//')) link = 'https:' + link;\n  else if (link.startsWith('/') && baseOrigin) link = baseOrigin + link;\n  else if (!/^https?:/i.test(link) && baseOrigin) link = baseOrigin + '/' + link.replace(/^\\/+/g, '');\n  if (!/^https?:\\/\\//i.test(link)) continue;\n  items.push({ title, url: link, summary: '', published_at: null });\n}\nconst seen = new Set();\nconst deduped = [];\nfor (const it of items) {\n  const k = (it.url + '|' + it.title).toLowerCase();\n  if (seen.has(k)) continue;\n  seen.add(k);\n  deduped.push(it);\n}\nreturn [{ json: { source: source.slug, items: deduped, has_items: deduped.length > 0 ? 'yes' : 'no' } }];"
+      },
+      "id": "code-build-crawl",
+      "name": "Build Crawl Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_items }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-crawl-items",
+      "name": "Crawl Has Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ittipolint-sbu.veya.co.th/dailynews/api/ingest/push",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "http-push-crawl",
+      "name": "Push Crawl",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        304
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tjTHYNN0eR5OYkDc",
+          "name": "DailyNews API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run every 1 hour": {
+      "main": [
+        [
+          {
+            "node": "Get Active Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Sources": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sources": {
+      "main": [
+        [
+          {
+            "node": "Loop Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Sources": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Is RSS?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is RSS?": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is API?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS": {
+      "main": [
+        [
+          {
+            "node": "Build RSS Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build RSS Payload": {
+      "main": [
+        [
+          {
+            "node": "RSS Has Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Has Items?": {
+      "main": [
+        [
+          {
+            "node": "Push RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push RSS": {
+      "main": [
+        [
+          {
+            "node": "Loop Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is API?": {
+      "main": [
+        [
+          {
+            "node": "Call API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Crawl?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call API": {
+      "main": [
+        [
+          {
+            "node": "Build API Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build API Payload": {
+      "main": [
+        [
+          {
+            "node": "API Has Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Has Items?": {
+      "main": [
+        [
+          {
+            "node": "Push API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push API": {
+      "main": [
+        [
+          {
+            "node": "Loop Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Crawl?": {
+      "main": [
+        [
+          {
+            "node": "Crawl Fetch HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl Fetch HTML": {
+      "main": [
+        [
+          {
+            "node": "Prep Crawl HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Crawl HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Crawl Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Crawl Items": {
+      "main": [
+        [
+          {
+            "node": "Build Crawl Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Crawl Payload": {
+      "main": [
+        [
+          {
+            "node": "Crawl Has Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl Has Items?": {
+      "main": [
+        [
+          {
+            "node": "Push Crawl",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Crawl": {
+      "main": [
+        [
+          {
+            "node": "Loop Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "09c72ccd-f2d3-48c3-995f-90924a80a6e1",
+  "meta": {
+    "instanceId": "0dc74db7df46e463bfcbb5028245c6c3d5cb977d0eecf6268089f4af5cb18e7f"
+  },
+  "nodeGroups": [],
+  "id": "Oq2iICNq0S6i6Ty7",
+  "tags": []
+}
