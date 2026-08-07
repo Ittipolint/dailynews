@@ -18,7 +18,7 @@ Route::prefix('setup')->group(function (): void {
 });
 
 Route::middleware('guest')->group(function (): void {
-    Route::view('/login', 'auth.login')->name('login');
+    Route::get('/login', [\App\Http\Controllers\Auth\LoginController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [\App\Http\Controllers\Auth\LoginController::class, 'login'])
         ->middleware('throttle:10,1');
 });
