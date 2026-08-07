@@ -81,6 +81,7 @@
             </li>
             @endif
         </ul>
+        @auth
         <div class="border-top pt-3 mt-3">
             <small class="text-secondary">{{ auth()->user()?->email }}</small>
             <form method="POST" action="{{ route('logout') }}" class="mt-2">
@@ -90,9 +91,24 @@
                 </button>
             </form>
         </div>
+        @endauth
     </nav>
 
     <main class="flex-grow-1">
+        @auth
+        <div class="d-flex justify-content-between align-items-center mb-3 bg-white border rounded p-3">
+            <h1 class="h5 mb-0">@yield('title', 'DailyNews')</h1>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-secondary small">{{ auth()->user()?->email }}</span>
+                <form method="POST" action="{{ route('logout') }}" class="m-0">
+                    @csrf
+                    <button type="submit" class="btn btn-danger btn-sm" title="ออกจากระบบ">
+                        <i class="bi bi-box-arrow-right me-1"></i>Logoff
+                    </button>
+                </form>
+            </div>
+        </div>
+        @endauth
         @if (session('success'))
             <div class="alert alert-success alert-dismissible fade show" role="alert">
                 {{ session('success') }}
