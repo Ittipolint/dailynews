@@ -141,7 +141,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 - **อีเมลสรุปประจำวัน (Daily Digest)** — ยังไม่พัฒนา
 - **Log การส่งและรายงานผล** — บันทึก `delivery_logs` (channel_type, news_ids, status, error_message, sent_at, schedule_id) และ Dashboard แสดงสถิติการส่ง; มีปุ่มส่งข่าวทันทีในหน้าตารางเวลา (schedule page) ให้เรียก `POST schedules/{schedule}/send-news`
 
-### 2.3 Feature การค้นหาข่าว (เปิดให้ใช้สำหรับ Admin เท่านั้น)
+### 2.3 Feature การค้นหาข่าว (สำหรับผู้ที่มีสิทธิ์เมนู `news`; admin ทุกคนเข้าได้)
 - หน้าจอค้นหาข่าวด้วย keyword
 - ค้นหาได้จาก title, summary, body, tags, category, source, ช่วงวันที่
 - แสดงผลแบบ pagination พร้อมข้อมูลต้นทางและลิงก์ไปยังบทความต้นฉบับ
@@ -223,7 +223,15 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
   - SMTP ของระบบ
   - LINE Messaging API Credential (Channel ID, Secret, Access Token)
 
-#### 2.6.4 Idea เพิ่มเติม (เพิ่มเติมจาก Requirement)
+#### 2.6.4 การจัดการผู้ใช้ (User Management) — เพิ่มเติมจาก Requirement
+- หน้าจอ `GET /admin/users` (เมนู "จัดการผู้ใช้") ให้ Admin เพิ่ม / แก้ไข / ลบผู้ใช้ระบบ
+- ฟิลด์: name, username (ใช้ล็อกอินได้), email (ใช้ล็อกอินได้), password (ตั้งใหม่ตอนเพิ่ม/แก้ไข; เว้นว่าง = ไม่เปลี่ยน), role (admin/staff/user), permissions (เฉพาะ role ที่ไม่ใช่ admin — กำหนดสิทธิ์ตามเมนูได้แก่ `dashboard/news/chat/sources/members/categories/credentials/users`)
+- ล็อกอิน (`/login`) ใช้ช่องเดียว "รหัสผู้ใช้ / อีเมล" โดยลอง match กับ `email` หรือ `username` แล้วตรวจรหัสผ่านด้วย `Hash::check`
+- บทบาท `admin` = เข้าถึงทุกเมนู (permissions ถูกบังคับเป็นเมนูทั้งหมดอัตโนมัติ); `staff` = ผู้ดูแลแต่ไม่ใช่ admin (ต้องกำหนด permissions); `user` = ผู้ใช้ทั่วไปตาม permissions
+- Guardrail: กันลบบัญชีตัวเอง, กันลบ/ลดสิทธิ์ผู้ดูแลระบบคนสุดท้าย (เหลือ admin < 1 ไม่ได้), Sidebar แสดงเฉพาะเมนูที่ผู้ใช้มีสิทธิ์
+- Seed ผู้ใช้เริ่มต้น (`UsersSeeder`): `ittipolint@gmail.com` (admin, ทุกเมนู, รหัสผ่านเดิมคงเดิม), `admin`/`10203040` (admin, ทุกเมนู), `user1`/`10203040` (user, `dashboard/news/chat`)
+
+#### 2.6.5 Idea เพิ่มเติม (เพิ่มเติมจาก Requirement)
 - **Audit Log** — บันทึกการแก้ไข Reference Data (ใคร แก้ไขอะไร เมื่อไร)
 - **ทดสอบการเชื่อมต่อ (Test Connection)** — ปุ่มทดสอบว่า Credential/แหล่งข่าวเชื่อมต่อได้หรือไม่
 - **โครงสร้าง Category / Keyword / Tag** — จัดการหมวดหมู่และคีย์เวิร์ดกลางของระบบ
@@ -337,8 +345,8 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 - `credentials` — id, code, name, config (json, encrypted), is_active, updated_by, last_tested_at (LINE, SMTP, Gemini LLM, n8n API, Neo4j)
 - `audit_logs` — id, user_id, action, entity, entity_id, old_value (json), new_value (json)
 
-### 5.2 ตาราง framework (Laravel) อยู่ใน MySQL เดียวกัน (migration `2026_08_01_000002_create_framework_tables.php`)
-- `users` (พร้อม column `role`: admin/staff/member), `password_reset_tokens`, `sessions`, `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs`
+### 5.2 ตาราง framework (Laravel) อยู่ใน MySQL เดียวกัน (migration `2026_08_01_000002_create_framework_tables.php` + `2026_08_07_000001_add_username_permissions_to_users.php`)
+- `users` (พร้อม column `role`: admin/staff/user, `username` (nullable unique), `permissions` (json, ใช้เฉพาะ role ที่ไม่ใช่ admin)), `password_reset_tokens`, `sessions`, `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs`
 
 ### 5.3 PostgreSQL / pgvector / Neo4j
 - **ไม่มีบทบาทเป็นฐานข้อมูลหลักของแอปใน Production**
@@ -350,7 +358,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 
 - Credential เก็บแบบเข้ารหัส (encrypted at rest ด้วย `CREDENTIAL_ENCRYPTION_KEY`) และ input ที่เป็น secret มีปุ่ม show/hide (masked) ในหน้า Admin
 - ใช้ HTTPS ทุกช่องทาง (SESSION_SECURE_COOKIE=true)
-- RBAC: แยกสิทธิ์ **Admin / Staff / Member** ผ่าน column `users.role` + middleware `EnsureUserHasRole`
+- RBAC: แยกสิทธิ์ **Admin / Staff / User** ผ่าน column `users.role` + `users.permissions` (json) + middleware `EnsureMenuAccess` (alias `menu`) สำหรับ gate ตามเมนู (`dashboard/news/chat/sources/members/categories/credentials/users`); ผู้ใช้ role `admin` ได้ทุกเมนู และกรณีเป็น admin แล้วหา role อื่นแทนไม่ได้ถ้าเป็นผู้ดูแลคนสุดท้าย (รวมถึงกันลบตัวเอง/ผู้ดูแลคนสุดท้าย)
 - API ภายใน (n8n ↔ Laravel) ตรวจสอบผ่าน **X-API-Token** (middleware `ApiToken`) — ไม่ใช่ signature/secret per request
 - Rate limiting: login (throttle 10/min) และ API routes
 - Backup: `deploy/backup.sh` (ตั้ง crontab `0 2 * * *`) + `deploy/restore.sh` — dump MySQL `ittipolint_dailynews`

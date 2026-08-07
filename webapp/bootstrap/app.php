@@ -29,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['setup/*']);
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
+            'menu' => \App\Http\Middleware\EnsureMenuAccess::class,
             'throttle.requests' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
             'api.token' => \App\Http\Middleware\ApiToken::class,
         ]);

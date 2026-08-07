@@ -29,77 +29,81 @@ Route::middleware('auth')->group(function (): void {
 
     Route::prefix('admin')->name('admin.')->group(function (): void {
         Route::get('/', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])
-            ->name('dashboard');
+            ->name('dashboard')->middleware('menu:dashboard');
+
+        // Users management
+        Route::resource('users', \App\Http\Controllers\Admin\UserController::class)
+            ->except(['show'])->middleware('menu:users');
 
         // News Source management (Reference Data)
         Route::resource('sources', \App\Http\Controllers\Admin\NewsSourceController::class)
-            ->except(['show']);
+            ->except(['show'])->middleware('menu:sources');
         Route::patch('sources/{source}/toggle', [\App\Http\Controllers\Admin\NewsSourceController::class, 'toggle'])
-            ->name('sources.toggle');
+            ->name('sources.toggle')->middleware('menu:sources');
         Route::post('sources/{source}/test', [\App\Http\Controllers\Admin\NewsSourceController::class, 'testConnection'])
-            ->name('sources.test');
+            ->name('sources.test')->middleware('menu:sources');
         Route::post('sources/{source}/fetch-now', [\App\Http\Controllers\Admin\NewsSourceController::class, 'fetchNow'])
-            ->name('sources.fetch-now');
+            ->name('sources.fetch-now')->middleware('menu:sources');
 
         // Members management
         Route::resource('members', \App\Http\Controllers\Admin\MemberController::class)
-            ->except(['show']);
+            ->except(['show'])->middleware('menu:members');
         Route::patch('members/{member}/toggle', [\App\Http\Controllers\Admin\MemberController::class, 'toggle'])
-            ->name('members.toggle');
+            ->name('members.toggle')->middleware('menu:members');
 
         // Member channels / interests / schedules
         Route::get('members/{member}/channels', [\App\Http\Controllers\Admin\MemberChannelController::class, 'index'])
-            ->name('members.channels.index');
+            ->name('members.channels.index')->middleware('menu:members');
         Route::post('members/{member}/channels', [\App\Http\Controllers\Admin\MemberChannelController::class, 'store'])
-            ->name('members.channels.store');
+            ->name('members.channels.store')->middleware('menu:members');
         Route::patch('channels/{channel}', [\App\Http\Controllers\Admin\MemberChannelController::class, 'update'])
-            ->name('members.channels.update');
+            ->name('members.channels.update')->middleware('menu:members');
         Route::delete('channels/{channel}', [\App\Http\Controllers\Admin\MemberChannelController::class, 'destroy'])
-            ->name('members.channels.destroy');
+            ->name('members.channels.destroy')->middleware('menu:members');
 
         Route::get('members/{member}/interests', [\App\Http\Controllers\Admin\MemberInterestController::class, 'index'])
-            ->name('members.interests.index');
+            ->name('members.interests.index')->middleware('menu:members');
         Route::post('members/{member}/interests', [\App\Http\Controllers\Admin\MemberInterestController::class, 'store'])
-            ->name('members.interests.store');
+            ->name('members.interests.store')->middleware('menu:members');
         Route::delete('interests/{interest}', [\App\Http\Controllers\Admin\MemberInterestController::class, 'destroy'])
-            ->name('members.interests.destroy');
+            ->name('members.interests.destroy')->middleware('menu:members');
 
         Route::get('members/{member}/schedules', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'index'])
-            ->name('members.schedules.index');
+            ->name('members.schedules.index')->middleware('menu:members');
         Route::post('members/{member}/schedules', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'store'])
-            ->name('members.schedules.store');
+            ->name('members.schedules.store')->middleware('menu:members');
         Route::get('schedules/{schedule}/edit', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'edit'])
-            ->name('members.schedules.edit');
+            ->name('members.schedules.edit')->middleware('menu:members');
         Route::patch('schedules/{schedule}', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'update'])
-            ->name('members.schedules.update');
+            ->name('members.schedules.update')->middleware('menu:members');
         Route::delete('schedules/{schedule}', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'destroy'])
-            ->name('members.schedules.destroy');
+            ->name('members.schedules.destroy')->middleware('menu:members');
         Route::post('schedules/{schedule}/send-news', [\App\Http\Controllers\Admin\MemberScheduleController::class, 'sendNews'])
-            ->name('members.schedules.send-news');
+            ->name('members.schedules.send-news')->middleware('menu:members');
 
         // News search (Admin only)
         Route::get('news', [\App\Http\Controllers\Admin\NewsSearchController::class, 'index'])
-            ->name('news.index');
+            ->name('news.index')->middleware('menu:news');
         Route::post('news/destroy-many', [\App\Http\Controllers\Admin\NewsSearchController::class, 'destroyMany'])
-            ->name('news.destroy-many');
+            ->name('news.destroy-many')->middleware('menu:news');
         Route::post('news/destroy-by-filter', [\App\Http\Controllers\Admin\NewsSearchController::class, 'destroyByFilter'])
-            ->name('news.destroy-by-filter');
+            ->name('news.destroy-by-filter')->middleware('menu:news');
 
         // Dashboard data endpoints (JSON, for charts)
         Route::get('dashboard/stats', [\App\Http\Controllers\Admin\DashboardController::class, 'stats'])
-            ->name('dashboard.stats');
+            ->name('dashboard.stats')->middleware('menu:dashboard');
         Route::get('dashboard/export', [\App\Http\Controllers\Admin\DashboardController::class, 'export'])
-            ->name('dashboard.export');
+            ->name('dashboard.export')->middleware('menu:dashboard');
 
         // Credentials (system)
         Route::get('credentials', [\App\Http\Controllers\Admin\CredentialController::class, 'index'])
-            ->name('credentials.index');
+            ->name('credentials.index')->middleware('menu:credentials');
         Route::put('credentials/{credential}', [\App\Http\Controllers\Admin\CredentialController::class, 'update'])
-            ->name('credentials.update');
+            ->name('credentials.update')->middleware('menu:credentials');
 
         // Categories
         Route::resource('categories', \App\Http\Controllers\Admin\CategoryController::class)
-            ->except(['show']);
+            ->except(['show'])->middleware('menu:categories');
     });
 
     Route::prefix('member')->name('member.')->group(function (): void {
@@ -121,8 +125,8 @@ Route::middleware('auth')->group(function (): void {
 
     Route::prefix('chat')->name('chat.')->group(function (): void {
         Route::get('/', [\App\Http\Controllers\ChatController::class, 'index'])
-            ->name('index');
+            ->name('index')->middleware('menu:chat');
         Route::post('ask', [\App\Http\Controllers\ChatController::class, 'ask'])
-            ->name('ask');
+            ->name('ask')->middleware('menu:chat');
     });
 });

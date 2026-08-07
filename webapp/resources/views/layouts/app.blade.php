@@ -24,41 +24,62 @@
             <i class="bi bi-newspaper fs-4 me-2"></i> DailyNews
         </a>
         <ul class="nav nav-pills flex-column mb-auto">
+            @if (auth()->user()?->canAccessMenu('dashboard'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">
                     <i class="bi bi-speedometer2 me-2"></i>Dashboard
                 </a>
             </li>
+            @endif
+            @if (auth()->user()?->canAccessMenu('news'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.news*') ? 'active' : '' }}" href="{{ route('admin.news.index') }}">
                     <i class="bi bi-search me-2"></i>ค้นหาข่าว
                 </a>
             </li>
+            @endif
+            @if (auth()->user()?->canAccessMenu('chat'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('chat.*') ? 'active' : '' }}" href="{{ route('chat.index') }}">
                     <i class="bi bi-chat-dots me-2"></i>Chat AI (Graph RAG)
                 </a>
             </li>
+            @endif
+            @if (auth()->user()?->canAccessMenu('sources'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.sources*') ? 'active' : '' }}" href="{{ route('admin.sources.index') }}">
                     <i class="bi bi-rss me-2"></i>แหล่งข่าว
                 </a>
             </li>
+            @endif
+            @if (auth()->user()?->canAccessMenu('members'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.members*') ? 'active' : '' }}" href="{{ route('admin.members.index') }}">
                     <i class="bi bi-people me-2"></i>สมาชิก
                 </a>
             </li>
+            @endif
+            @if (auth()->user()?->canAccessMenu('categories'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.categories*') ? 'active' : '' }}" href="{{ route('admin.categories.index') }}">
                     <i class="bi bi-tags me-2"></i>หมวดหมู่
                 </a>
             </li>
+            @endif
+            @if (auth()->user()?->canAccessMenu('credentials'))
             <li class="nav-item">
                 <a class="nav-link {{ request()->routeIs('admin.credentials*') ? 'active' : '' }}" href="{{ route('admin.credentials.index') }}">
                     <i class="bi bi-key me-2"></i>Credentials
                 </a>
             </li>
+            @endif
+            @if (auth()->user()?->canAccessMenu('users'))
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('admin.users*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
+                    <i class="bi bi-people-fill me-2"></i>จัดการผู้ใช้
+                </a>
+            </li>
+            @endif
         </ul>
         <div class="border-top pt-3 mt-3">
             <small class="text-secondary">{{ auth()->user()?->email }}</small>
