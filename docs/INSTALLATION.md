@@ -72,9 +72,26 @@ PGSQL_PASSWORD=10203040
 N8N_URL=https://n8n38-sbu.veya.co.th
 N8N_API_KEY=<api-key-from-requirement>
 
-# Translation + AI (Google Gemini)
+# Translation + AI (multi-provider LLM)
+# Primary provider (default Google Gemini)
 GOOGLE_GEMINI_API_KEY=<your-gemini-key>
-TRANSLATION_DRIVER=google
+LLM_API_KEY=<your-llm-key>
+LLM_DRIVER=google            # or: openai (Groq/OpenRouter/OpenAI/DeepSeek)
+LLM_MODEL=gemini-2.5-flash
+LLM_BASE_URL=                # required when LLM_DRIVER=openai, e.g. https://api.groq.com/openai/v1
+TRANSLATION_DRIVER=google     # default inherits LLM_*
+TRANSLATION_API_KEY=
+TRANSLATION_MODEL=gemini-2.5-flash
+TRANSLATION_BASE_URL=
+
+# Fallback provider (used automatically when primary fails: quota/region blocked)
+LLM_FALLBACK_DRIVER=
+LLM_FALLBACK_API_KEY=
+LLM_FALLBACK_MODEL=
+LLM_FALLBACK_BASE_URL=
+
+# Optional: classify news categories with the LLM (default keyword-based)
+CATEGORY_CLASSIFIER_LLM_ENABLED=false
 
 # LINE
 LINE_CHANNEL_ID=1528339539

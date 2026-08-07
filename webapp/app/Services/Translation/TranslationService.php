@@ -6,7 +6,7 @@ namespace App\Services\Translation;
 
 use App\Models\News;
 use App\Models\NewsTranslation;
-use Illuminate\Support\Facades\Http;
+use App\Services\Llm\LlmService;
 use Illuminate\Support\Facades\Log;
 
 class TranslationService
@@ -21,6 +21,7 @@ class TranslationService
         foreach (self::TARGET_LOCALES as $locale) {
             if ($locale === $sourceLang) {
                 $results[$locale] = $this->copyOriginal($news, $locale);
+
                 continue;
             }
 
@@ -127,6 +128,7 @@ class TranslationService
 
             if ($locale === $sourceLang) {
                 $this->copyOriginal($item, $locale);
+
                 continue;
             }
 
@@ -168,80 +170,26 @@ class TranslationService
     }
 
     /**
-     * Call the Gemini generateContent endpoint with retry + backoff on the
-     * free-tier rate limit (HTTP 429), honouring the returned retry delay.
+     * Call the configured LLM provider (Google Gemini by default) through the
+     * LlmService abstraction, with the translation driver config as the primary
+     * provider and the shared llm.fallback as the automatic failover.
      */
     protected function callGenerateContent(string $payload): string
     {
-        $apiKey = config('services.translation.api_key');
-        $model = config('services.translation.model', 'gemini-2.5-flash');
-        $attempts = 0;
-        $maxAttempts = (int) config('services.translation.retry_attempts', 3);
+        $llm = app(LlmService::class);
 
-        do {
-            $attempts++;
-
-            $response = Http::timeout(90)
-                ->withQueryParameters(['key' => $apiKey])
-                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
-                    'contents' => [
-                        [
-                            'parts' => [
-                                ['text' => $payload],
-                            ],
-                        ],
-                    ],
-                    'generationConfig' => [
-                        'temperature' => 0.2,
-                        'maxOutputTokens' => 8192,
-                    ],
-                ]);
-
-            if ($response->successful()) {
-                $text = $response->json('candidates.0.content.parts.0.text');
-
-                if ($text) {
-                    return (string) $text;
-                }
-
-                throw new \RuntimeException('Empty translation response');
-            }
-
-            if ($response->status() === 429) {
-                $body = $response->json();
-                $retryDelay = $this->retryDelayFrom($body);
-
-                Log::channel('translation')->warning('Translation rate limited, backing off', [
-                    'attempt' => $attempts,
-                    'retry_in' => $retryDelay,
-                ]);
-
-                if ($attempts >= $maxAttempts) {
-                    throw new \RuntimeException("Translation rate limit exceeded: {$response->status()} {$response->body()}");
-                }
-
-                sleep($retryDelay);
-
-                continue;
-            }
-
-            throw new \RuntimeException("Translation API error: {$response->status()} {$response->body()}");
-        } while (true);
-    }
-
-    protected function retryDelayFrom(?array $body): int
-    {
-        if (! $body) {
-            return 30;
-        }
-
-        foreach (($body['error']['details'] ?? []) as $detail) {
-            if (isset($detail['retryDelay'])) {
-                return (int) preg_replace('/[^0-9]/', '', (string) $detail['retryDelay']) ?: 30;
-            }
-        }
-
-        return 30;
+        return $llm->generate($payload, [
+            'provider' => [
+                'driver' => config('services.translation.driver', 'google'),
+                'api_key' => config('services.translation.api_key'),
+                'model' => config('services.translation.model', 'gemini-2.5-flash'),
+                'base_url' => config('services.translation.base_url'),
+                'timeout' => config('services.llm.timeout', 90),
+            ],
+            'temperature' => 0.2,
+            'max_tokens' => 8192,
+            'retries' => (int) config('services.translation.retry_attempts', 3),
+        ]);
     }
 
     protected function googlePayload(News $news, string $locale): string
@@ -253,8 +201,8 @@ class TranslationService
         ][$locale];
 
         return "You are a professional news translator. Translate the following news article into {$localeName}. "
-            ."Keep the meaning faithful, preserve proper nouns where appropriate, and use natural journalistic language. "
-            ."Return ONLY a JSON object with keys: title, summary, body. "
+            .'Keep the meaning faithful, preserve proper nouns where appropriate, and use natural journalistic language. '
+            .'Return ONLY a JSON object with keys: title, summary, body. '
             ."Do not wrap in markdown code fences.\n\n"
             ."--- TITLE ---\n{$news->title}\n"
             ."--- SUMMARY ---\n".($news->summary ?? '')."\n"
@@ -277,13 +225,13 @@ class TranslationService
         foreach ($chunk as $id => $news) {
             $articles .= "[{$id}]\n"
                 ."TITLE: {$news->title}\n"
-                ."SUMMARY: ".($news->summary ?? '')."\n"
-                ."BODY: ".($news->body ?? '')."\n\n";
+                .'SUMMARY: '.($news->summary ?? '')."\n"
+                .'BODY: '.($news->body ?? '')."\n\n";
         }
 
         return "You are a professional news translator. Translate each of the following news articles into {$localeName}. "
-            ."Keep the meaning faithful, preserve proper nouns where appropriate, and use natural journalistic language. "
-            ."Return ONLY a JSON object where each key is the article id and each value is an object with keys: title, summary, body. "
+            .'Keep the meaning faithful, preserve proper nouns where appropriate, and use natural journalistic language. '
+            .'Return ONLY a JSON object where each key is the article id and each value is an object with keys: title, summary, body. '
             ."Do not wrap in markdown code fences. Include every article id.\n\n"
             .$articles;
     }
@@ -308,7 +256,7 @@ class TranslationService
                     continue;
                 }
 
-                $resolved = in_array((string) $key, $ids, true) ? (string) $key : $this->firstKnownId($key, $ids);
+                $resolved = in_array((string) $key, $ids, true) ? (string) $key : $this->firstKnownId((string) $key, $ids);
 
                 if ($resolved !== null) {
                     $out[$resolved] = [

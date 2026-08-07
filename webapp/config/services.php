@@ -5,9 +5,10 @@ declare(strict_types=1);
 return [
 
     'translation' => [
-        'driver' => env('TRANSLATION_DRIVER', 'google'),
-        'api_key' => env('GOOGLE_GEMINI_API_KEY'),
-        'model' => env('GOOGLE_GEMINI_MODEL', 'gemini-2.5-flash'),
+        'driver' => env('TRANSLATION_DRIVER', env('LLM_DRIVER', 'google')),
+        'api_key' => env('TRANSLATION_API_KEY', env('LLM_API_KEY', env('GOOGLE_GEMINI_API_KEY'))),
+        'model' => env('TRANSLATION_MODEL', env('LLM_MODEL', 'gemini-2.5-flash')),
+        'base_url' => env('TRANSLATION_BASE_URL', env('LLM_BASE_URL')),
         'batch_size' => (int) env('TRANSLATION_BATCH_SIZE', 5),
         'retry_attempts' => (int) env('TRANSLATION_RETRY_ATTEMPTS', 3),
     ],
@@ -16,12 +17,25 @@ return [
         'driver' => env('LLM_DRIVER', 'google'),
         'api_key' => env('LLM_API_KEY', env('GOOGLE_GEMINI_API_KEY')),
         'model' => env('LLM_MODEL', 'gemini-2.5-flash'),
+        'base_url' => env('LLM_BASE_URL'),
+        'timeout' => (int) env('LLM_TIMEOUT', 90),
+        'fallback' => [
+            'driver' => env('LLM_FALLBACK_DRIVER'),
+            'api_key' => env('LLM_FALLBACK_API_KEY'),
+            'model' => env('LLM_FALLBACK_MODEL'),
+            'base_url' => env('LLM_FALLBACK_BASE_URL'),
+            'timeout' => (int) env('LLM_FALLBACK_TIMEOUT', 90),
+        ],
     ],
 
     'embedding' => [
         'driver' => env('EMBEDDING_DRIVER', 'google'),
         'api_key' => env('EMBEDDING_API_KEY', env('GOOGLE_GEMINI_API_KEY')),
         'model' => env('EMBEDDING_MODEL', 'gemini-embedding-001'),
+    ],
+
+    'category_classifier' => [
+        'llm_enabled' => (bool) env('CATEGORY_CLASSIFIER_LLM_ENABLED', false),
     ],
 
     'line' => [

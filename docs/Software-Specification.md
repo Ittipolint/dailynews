@@ -1,10 +1,12 @@
 # Software Specification — ระบบ DailyNews
 
-**เวอร์ชัน:** 1.3
-**วันที่:** 6 สิงหาคม 2026
+**เวอร์ชัน:** 1.4
+**วันที่:** 7 สิงหาคม 2026
 **ผู้จัดทำ:** ทีมออกแบบระบบ IT (ตามเอกสาร Requirement Specification)
 **สถานะ:** อนุมัติเพื่อใช้เป็นแนวทางพัฒนา (ปรับปรุงให้ตรงกับระบบที่พัฒนาจริง/Production)
 
+> **หมายเหตุฉบับ 1.4:** ปรับปรุงจาก 1.3 (6 ส.ค. 2026) เพิ่ม **LlmService** (multi-provider LLM abstraction) ให้ระบบแปลข่าว AI Chat Graph RAG และการจัดหมวดหมู่ข่าวใช้ LLM ผ่าน provider เดียวกันได้ โดยมี automatic failover ไปยัง provider สำรองเมื่อ provider หลักล้มเหลว (เช่น quota หมด/region ถูกบล็อก) ดูหัวข้อ [2.1.5](#215-การแปลภาษา), [2.1.6](#216-หน้าจอ-chat-สำหรับค้นหาข่าวย้อนหลัง-ai-graph-rag) และ [2.1.4](#214-การจัดหมวดหมู่และกรองข่าวตามหมวดหมู่)
+>
 > **หมายเหตุฉบับ 1.3:** ปรับปรุงจาก 1.2 (6 ส.ค. 2026) เพิ่มการจัดหมวดหมู่ข่าวอัตโนมัติตามเนื้อหา (CategoryClassifier) และการกรองข่าวตามหมวดหมู่ที่ตั้งค่าของแต่ละแหล่งข่าวระหว่างขั้นตอน ingestion ดูหัวข้อ [2.1.3](#213-เก็บข้อมูลข่าวลงฐานข้อมูล) และ [2.1.4](#214-การจัดหมวดหมู่และกรองข่าวตามหมวดหมู่)
 
 ---
@@ -82,18 +84,21 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 
 #### 2.1.4 การจัดหมวดหมู่และกรองข่าวตามหมวดหมู่ (Category Classification & Filtering)
 - **ที่มา:** เดิม `News.category` ถูกเขียนด้วยค่า `$source->category` ตรง ๆ (ซึ่งเป็น comma-list ครอบเกือบทุกหมวด เช่น `business,entertainment,general,...,sports,technology,world`) ทำให้การกรองข่าวตามหมวดหมู่ไร้ความหมาย เนื่องจากทุกข่าวได้หมวดตาม list ทั้งหมดของ source
-- **พฤติกรรมใหม่:** ตอนบันทึกทุก item จะคำนวณ `category` จากเนื้อหาจริงผ่าน `CategoryClassifier` (น้ำหนัก keyword: title 2-3, summary 1-2, คำยาวมีน้ำหนักมากกว่า; ภาษาไทย+อังกฤษ; fallback `general`) และ `configuredCategories($source)` จะ split ค่า `news_sources.category` ด้วย `,` — ถ้า list ไม่ว่างและหมวดที่คำนวณไม่อยู่ใน list จะ **skip (ไม่บันทึก)** item นั้น
+- **พฤติกรรมใหม่:** ตอนบันทึกทุก item จะคำนวณ `category` จากเนื้อหาจริงผ่าน `CategoryClassifier` และ `configuredCategories($source)` จะ split ค่า `news_sources.category` ด้วย `,` — ถ้า list ไม่ว่างและหมวดที่คำนวณไม่อยู่ใน list จะ **skip (ไม่บันทึก)** item นั้น
+- **โหมดการจัดหมวดหมู่ (ณ ฉบับ 1.4):** `CategoryClassifier::classify()` มี 2 โหมด —
+  1. **LLM mode** (เมื่อ `CATEGORY_CLASSIFIER_LLM_ENABLED=true` และมี LLM provider ทำงาน): ส่ง prompt ผ่าน `LlmService` (temperature 0, max_tokens 20, JSON `{"category":"..."}`) ให้เลือก 1 ใน 9 หมวด; คำตอบซ้ำใน request เดียวถูก cache ไว้ (ไม่เรียก LLM ซ้ำ); ถ้า LLM ไม่พร้อม/ตอบหมวดที่ไม่อยู่ใน list → ตกไปใช้ keyword mode ทันที
+  2. **Keyword mode** (ค่าเริ่มต้น, fallback): ให้คะแนน keyword EN+TH (title น้ำหนัก 2-3, summary 1-2, คำยาวน้ำหนักมากกว่า) → หมวดที่คะแนนสูงสุด; ถ้าไม่ตรงเลย → `general`
 - **ผลจริงใน Production:** แหล่งข่าว Thai PBS (crawl) ตั้ง category = `technology` + URL หน้าเทคโนโลยี → เมื่อ Fetch Now ระบบเก็บได้เฉพาะบทความที่จัดเป็น `technology` (เช่น SONP, TechForge 2026) และตัดข่าวอวกาศ/ดาราศาสตร์ที่จัดเป็น `science` ทิ้งโดยอัตโนมัติ (ยืนยันจาก ingest log `stored:2` และ admin news filter)
 - **ข้อควรทราบ:** แหล่งข่าว RSS/API ทั่วไปที่ต้องการรับข่าวทุกหมวด ควรตั้ง category ครอบครบทุกรายการที่มี (หรือปล่อยว่าง) เพื่อไม่ให้ถูกกรองออก
 
 #### 2.1.5 การแปลข่าวเป็น 3 ภาษาหลัก
 - ระบบแปลข่าวจากภาษาต้นทางเป็นไทย (th), อังกฤษ (en), จีน (zh)
-- กลไกการแปล: **TranslationService (Google Gemini LLM, model `gemini-2.5-flash`)** ทำงานเป็น background job หลังการดึงข่าว
+- กลไกการแปล: **TranslationService** ทำงานเป็น background job หลังการดึงข่าว; การเรียก LLM ผ่าน **LlmService** (multi-provider abstraction) — provider หลักจาก `services.translation.*` (ค่าเริ่มต้น Google Gemini `gemini-2.5-flash` ตาม `TRANSLATION_DRIVER`/`TRANSLATION_API_KEY`/`TRANSLATION_MODEL`) และถ้า primary ล้มเหลวจะ **failover ไป `services.llm.fallback.*` อัตโนมัติ**
 - **การทำงานจริง: Laravel scheduled job `dailynews:translate` (ทุก 1 ชั่วโมง, `--limit=20`)** เป็นตัวดำเนินการหลัก; n8n translate workflow มีใน repo แต่ inactive (ทำหน้าที่ health check เท่านั้น)
 - เก็บข้อความแปลในตาราง `news_translations` แยกตาม locale; unique(news_id, locale)
 - สถานะการแปล (pending/translated/failed) เก็บใน `news_translations.status` + `error_message` เพื่อ re-run ได้
-- รองรับ batch translation (TRANSLATION_BATCH_SIZE=5) และ retry (TRANSLATION_RETRY_ATTEMPTS=3) + backoff
-- **ข้อจำกัด (พบจริง)**: Gemini free tier quota จำกัด 20 request/model/วัน → เมื่อหมด quota การแปลจะ "ข้ามแล้วใช้ต้นฉบับ" (translate-on-delivery fallback) หรือ fail แล้วรอ retry รอบถัดไป
+- รองรับ batch translation (TRANSLATION_BATCH_SIZE=5) และ retry (TRANSLATION_RETRY_ATTEMPTS=3) + backoff (429 ให้อ่าน retry delay จาก response และ sleep ก่อนลองใหม่)
+- **ข้อจำกัด (พบจริง ณ ส.ค. 2026):** Gemini API ตอบ 400 `FAILED_PRECONDITION "User location is not supported"` จาก IP ของ server (region ถูกบล็อก) ทำให้ Gemini ใช้ไม่ได้เป็น primary จริงบน prod — ทางแก้คือตั้ง `LLM_FALLBACK_*` ไปยัง provider OpenAI-compatible (Groq/OpenRouter/OpenAI/DeepSeek) ที่รองรับ region นี้; เมื่อ provider ทั้งหมดล้มเหลวการแปลจะ mark `failed` + บันทึก error ไว้รอ re-run (ไม่ทำให้ server 500)
 
 #### 2.1.6 หน้าจอ Chat สำหรับค้นหาข่าวย้อนหลัง (AI Graph RAG)
 - มีหน้าจอ Chat (`GET /chat` + `POST /chat/ask`) สำหรับผู้ใช้ที่ login ค้นหาข่าวย้อนหลังด้วยภาษาธรรมชาติ
@@ -101,7 +106,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
   - `GraphRagService::retrieve()` ค้นหาจาก `title/summary/body` + `news_translations` ด้วย SQL LIKE บน keyword และ entity ที่สกัดจากคำถาม (หยุดคำภาษาไทย/อังกฤษ)
   - `GraphRagService::extractKeywords()` แยก keyword + สไลด์ n-gram สำหรับภาษาไทย/จีน (ไม่มีช่องว่างระหว่างคำ)
   - `buildContext()` สร้างบริบทข่าวพร้อม source + วันที่ + URL
-  - `generateAnswer()` ส่ง prompt ไป LLM (Gemini `gemini-2.5-flash`) ผ่าน `services.llm.*` ให้ตอบพร้อม citation [index]; **ถ้า LLM ไม่พร้อม (quota หมด / key ว่าง) จะ fallback ส่งรายการข่าวที่เกี่ยวข้อง ("พบข่าวที่เกี่ยวข้องดังนี้...")**
+  - `generateAnswer()` ส่ง prompt ไป **LlmService** (`services.llm.*` primary + `services.llm.fallback.*`) ให้ตอบพร้อม citation [index]; **ถ้า LLM ไม่พร้อม (quota หมด / key ว่าง / provider ทั้งหมดล้มเหลว) จะ fallback ส่งรายการข่าวที่เกี่ยวข้อง ("พบข่าวที่เกี่ยวข้องดังนี้...")**
   - Response ประกอบด้วย `answer`, `sources[]` (id, title, url, source, published_at, relevance), `entities`, `keywords`
 - ยังไม่มี: จริง ๆ ไม่มี pgvector/embedding/Neo4j ต่อในเวิร์กโฟลว์นี้ (config มี NEO4J_* และ EMBEDDING_* ไว้ แต่ `GraphRagService` ไม่ได้เรียกใช้) — ถือเป็นส่วน "เตรียมโครงสร้าง" สำหรับ Phase 2
 
@@ -125,9 +130,9 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 
 #### 2.2.3 การแปลข่าวให้ตรงกับภาษาสมาชิกก่อนส่ง (Translation on Delivery)
 - ข่าวทุกชิ้นที่ส่งให้สมาชิก ต้องอยู่ในภาษา `preferred_locale` ของสมาชิกคนนั้น (th / en / zh)
-- ระบบส่งข่าว (ทั้งแบบ Schedule และปุ่มส่งข่าวทันที) ตรวจก่อนส่งว่าแต่ละข่าวมี translation ในภาษาสมาชิกหรือไม่; ถ้ายังไม่มีให้แปลทันทีด้วย TranslationService (Gemini) แล้วค่อยส่ง
+- ระบบส่งข่าว (ทั้งแบบ Schedule และปุ่มส่งข่าวทันที) ตรวจก่อนส่งว่าแต่ละข่าวมี translation ในภาษาสมาชิกหรือไม่; ถ้ายังไม่มีให้แปลทันทีด้วย TranslationService (ผ่าน LlmService) แล้วค่อยส่ง
 - ถ้าภาษาต้นทางของข่าวเท่ากับภาษาสมาชิก จะใช้ข้อความต้นฉบับ (ไม่เสียค่า API)
-- ถ้า Gemini quota หมด → ระบบข้ามการแปลและส่งเนื้อหาต้นฉบับ (log WARNING "Translation skipped, sending original")
+- ถ้า LLM ทั้งหมดล้มเหลว (quota หมด / provider ไม่พร้อม) → ระบบข้ามการแปลและส่งเนื้อหาต้นฉบับ (log WARNING "Translation skipped, sending original")
 - ผลการแปลเก็บในตาราง `news_translations` เพื่อใช้ซ้ำในครั้งถัดไป
 
 #### 2.2.3 ช่องทางส่งข่าวเริ่มต้น (ChannelType enum: line_personal / line_oa / email)
@@ -251,7 +256,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 | Web Application (Backend) | **PHP 8.3.x + Laravel 12** (`php: ^8.2`, runtime 8.3.32) | Framework มาตรฐาน |
 | ฐานข้อมูล (หลัก + ทั้งหมด) | **MySQL / MariaDB** (เดียว) | `DB_CONNECTION=mysql`, DB `ittipolint_dailynews`; เก็บข่าว สมาชิก แหล่งข่าว แปลภาษา schedule log ทั้งหมด |
 | Workflow / Background Job | **Laravel Console Scheduler (`schedule:run`) + n8n (webhook เท่านั้น)** | `dailynews:ingest`/`translate` (รายชั่วโมง) + `dailynews:deliver` (ทุกนาที); n8n ใช้สำหรับ Fetch Now webhook + trigger deliver |
-| AI / LLM / Translation | **Google Gemini** (`gemini-2.5-flash`) | แปลข่าว 3 ภาษา + ตอบคำถาม chat; embedding config มีไว้ (gemini-embedding-001) แต่ยังไม่เชื่อม workflow |
+| AI / LLM / Translation | **Multi-provider LLM abstraction (`LlmService`)** — primary: `LLM_DRIVER` (`google` Gemini `gemini-2.5-flash` / `openai`-compatible); fallback: `LLM_FALLBACK_DRIVER`+`LLM_FALLBACK_BASE_URL` (Groq/OpenRouter/OpenAI/DeepSeek) | แปลข่าว 3 ภาษา + ตอบคำถาม chat + จัดหมวดหมู่ข่าว (optional); failover อัตโนมัติเมื่อ primary ล้มเหลว; embedding config มีไว้ (gemini-embedding-001) แต่ยังไม่เชื่อม workflow |
 | Frontend | **Laravel Blade + Bootstrap 5 (Bootstrap Icons)** + vanilla JS/AJAX | ไม่ใช้ Vue.js |
 | Search (Admin) | **MySQL `LIKE` + filters** (`NewsSearchService`) | ค้นหา title/summary/body + กรองหมวด/แหล่ง/ภาษา/ช่วงเวลา |
 | Cache / Session / Queue | **File** (`CACHE_STORE=file`, `SESSION_DRIVER=file`, `QUEUE_CONNECTION=sync`) | ไม่ใช้ Redis ใน Production |
@@ -291,10 +296,10 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
                     ▼                           ▼
         ┌─────────────────────────┐  ┌───────────────────────────┐
         │ TranslationService      │  │ DeliveryService            │
-        │ (Gemini gemini-2.5-flash│  │ (dailynews:deliver, every  │
-        │  → news_translations)   │  │  1 min; schedule-based)    │
-        └─────────────────────────┘  └─────────────┬─────────────┘
-                                                   ▼
+        │ (LlmService: primary    │  │ (dailynews:deliver, every  │
+        │  + fallback providers)  │  │  1 min; schedule-based)    │
+        │  → news_translations)   │  └─────────────┬─────────────┘
+        └─────────────────────────┘                ▼
                     ┌──────────────────────────────────────────┐
                     │  Channels: LINE Personal / LINE OA / Email│
                     └──────────────────────────────────────────┘
@@ -304,7 +309,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
         │   - Admin panel / Dashboard (stats+CSV)  │
         │   - News Search (Admin, MySQL LIKE)      │
         │   - Chat AI (GraphRagService: keyword    │
-        │     retrieval + Gemini LLM w/ citation)  │
+        │     retrieval + LlmService w/ citation)  │
         └──────────────────────────────────────────┘
 ```
 
@@ -314,19 +319,19 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 1. Trigger: Laravel schedule `dailynews:ingest` (ทุก 1 ชม.) หรือ n8n webhook "Fetch Source Now" (กดปุ่มในหน้า Admin)
 2. `IngestionService` ดึงตาม `fetch_type` (rss/api/crawl) — RSS ผ่าน HTTP + parse XML, API ผ่าน HTTP + normalize, Crawl ผ่าน CSS selectors
 3. Mapping + Deduplication (`source_url` unique + `content_hash`) → บันทึก MySQL
-4. `dailynews:translate` (ทุก 1 ชม.) แปล pending เป็น th/en/zh ลง `news_translations` (Gemini)
+4. `dailynews:translate` (ทุก 1 ชม.) แปล pending เป็น th/en/zh ลง `news_translations` ผ่าน `LlmService` (primary + fallback)
 
 **Flow 2: ส่งข่าว (Delivery)**
 1. Laravel schedule `dailynews:deliver` (ทุกนาที) ตรวจ `member_schedules` ที่ครบกำหนด (หรือ Admin กดปุ่มส่งข่าวทันทีในหน้า schedule)
 2. `DeliveryService::deliverScheduleNow()` Query ข่าวตามกฎ schedule (categories / interests ของสมาชิก / limit)
-3. ตรวจ/แปลภาษาให้ตรง `preferred_locale` (Gemini; ถ้า quota หมดส่งต้นฉบับ)
+3. ตรวจ/แปลภาษาให้ตรง `preferred_locale` (ผ่าน `LlmService`; ถ้า LLM ทั้งหมดล้มเหลวส่งต้นฉบับ)
 4. ส่งผ่าน LINE Messaging API (personal/OA) หรือ SMTP email ตาม `member_channels`
 5. บันทึก `delivery_logs` + `audit_logs`
 
 **Flow 3: Chat AI (RAG แบบเบา)**
 1. ผู้ใช้ส่งคำถาม (`POST /chat/ask`)
 2. `GraphRagService` สกัด keyword/entity (รวม n-gram สำหรับภาษาไทย/จีน) → query MySQL (title/summary/body + translations) ด้วย LIKE
-3. buildContext → Gemini `generateContent` สร้างคำตอบพร้อม citation [index]
+3. buildContext → `LlmService` สร้างคำตอบพร้อม citation [index] (primary + fallback; ล้มเหลวทั้งคู่ → fallback รายการข่าว)
 4. แสดงคำตอบ + `sources[]` (ลิงก์บทความต้นฉบับ); ถ้า LLM ล้มเหลว → fallback รายการข่าวที่เกี่ยวข้อง
 
 ---
@@ -393,7 +398,10 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 | **LINE Channel ID / Name** | `1528339539` / `Ittipol@` |
 | **LINE Webhook URL** | `https://n8n38-sbu.veya.co.th/webhook/line` |
 | **Fetch Now Webhook URL** | `https://n8n38-sbu.veya.co.th/webhook/dailynews-fetch-now` |
-| **Gemini (Translation + LLM)** | `GOOGLE_GEMINI_API_KEY` / `LLM_API_KEY`, model `gemini-2.5-flash` |
+| **LLM (Translation + Chat + Category)** | Primary: `LLM_DRIVER`/`LLM_API_KEY`/`LLM_MODEL`/`LLM_BASE_URL`; Translation ใช้ `TRANSLATION_DRIVER`/`TRANSLATION_API_KEY`/`TRANSLATION_MODEL`/`TRANSLATION_BASE_URL` (default สืบทอดจาก LLM_*) | ภาษา: ปัจจุบัน Gemini key ใช้งานไม่ได้จาก region server (400 FAILED_PRECONDITION) ต้องตั้ง fallback |
+| **LLM Fallback (สำรอง)** | `LLM_FALLBACK_DRIVER`/`LLM_FALLBACK_API_KEY`/`LLM_FALLBACK_MODEL`/`LLM_FALLBACK_BASE_URL` (Groq: `https://api.groq.com/openai/v1`; OpenRouter: `https://openrouter.ai/api/v1`; OpenAI: `https://api.openai.com/v1`; DeepSeek: `https://api.deepseek.com/v1`) | ใช้ `openai` driver สำหรับ /chat/completions; failover อัตโนมัติเมื่อ primary ล้มเหลว |
+| **Gemini (เดิม)** | `GOOGLE_GEMINI_API_KEY` / `GOOGLE_GEMINI_MODEL` (`gemini-2.5-flash`) | ใช้เป็น default ของ LLM_*/TRANSLATION_* ถ้าไม่ได้ตั้งค่า |
+| **Category Classifier (LLM optional)** | `CATEGORY_CLASSIFIER_LLM_ENABLED` (true/false, default false) | true → ใช้ `LlmService` จัดหมวด; false → keyword EN+TH |
 | **Embedding (เตรียมไว้)** | `EMBEDDING_API_KEY`, model `gemini-embedding-001` |
 | **Email Sender** | `DailyNews` (`dailynews@ittipolint-sbu.veya.co.th`) |
 | **Admin** | `ADMIN_EMAIL=ittipolint@gmail.com` |
@@ -478,10 +486,10 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 ### Phase 1 (สถานะปัจจุบัน — เสร็จตามที่พัฒนาจริง)
 - Web App Laravel (Admin/Member/Chat) + MySQL เดียว
 - Import แหล่งข่าวเริ่มต้น (14 sources) + ingestion (RSS/API/Crawl) ผ่าน Laravel + n8n fetch-now
-- ระบบแปลภาษา th/en/zh ใช้ Google Gemini (`dailynews:translate`)
+- ระบบแปลภาษา th/en/zh ใช้ multi-provider LLM ผ่าน `LlmService` (`dailynews:translate`)
 - ระบบจัดการสมาชิก + channel LINE/Email + schedule ส่งข่าว + ปุ่มส่งข่าวทันที (แก้ไข schedule ได้)
 - Dashboard พื้นฐาน (สถิติ + Export CSV) ใน Blade
-- ระบบค้นหา keyword (Admin) + AI Chat (RAG แบบเบา: keyword + Gemini LLM)
+- ระบบค้นหา keyword (Admin) + AI Chat (RAG แบบเบา: keyword + LlmService)
 - n8n ใช้เฉพาะ webhook (Fetch Now, Trigger Deliver)
 
 ### Phase 2 (ถัดไป)

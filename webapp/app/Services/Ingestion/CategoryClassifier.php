@@ -4,16 +4,33 @@ declare(strict_types=1);
 
 namespace App\Services\Ingestion;
 
+use App\Services\Llm\LlmService;
 use Illuminate\Support\Str;
 
 /**
  * Classifies a news headline (optionally plus summary) into a single category
- * code by scoring known keywords in both English and Thai. This is used during
+ * code. When an LLM is configured (services.category_classifier.llm_enabled),
+ * the LLM is asked to pick the category; otherwise (or on LLM failure) a
+ * keyword-based scorer in both English and Thai is used. This runs during
  * ingestion so each stored article gets its *actual* category from its content,
  * instead of inheriting the source's configured category.
  */
 class CategoryClassifier
 {
+    private const CATEGORIES = [
+        'technology', 'business', 'sports', 'world', 'politics',
+        'science', 'health', 'entertainment', 'general',
+    ];
+
+    /**
+     * In-request cache so repeated classify() calls for the same text (e.g. the
+     * same article processed by both ingestion and reclassify) only use one
+     * LLM request.
+     */
+    private array $llmCache = [];
+
+    public function __construct(private readonly ?LlmService $llm = null) {}
+
     /**
      * Category code => list of trigger words (lowercased). Longer, more specific
      * words are weighted more heavily so e.g. "ชิป" beats a generic "บริษัท".
@@ -90,8 +107,96 @@ class CategoryClassifier
     /**
      * Score an article's title (and optional summary/body) and return the best
      * matching category code. Falls back to "general" when nothing matches.
+     * When an LLM is enabled, the LLM answers first and the keyword scorer is
+     * only used if the LLM is unavailable or returns an invalid category.
      */
     public function classify(?string $title, ?string $summary = null): string
+    {
+        if ($this->llmEnabled()) {
+            $category = $this->classifyWithLlm($title, $summary);
+
+            if ($category !== null) {
+                return $category;
+            }
+        }
+
+        return $this->classifyWithKeywords($title, $summary);
+    }
+
+    /**
+     * Ask the configured LLM to pick a category, returning null when it is
+     * unavailable, errors, or returns an invalid category code.
+     */
+    protected function classifyWithLlm(?string $title, ?string $summary): ?string
+    {
+        $text = trim(($title ?? '').' '.($summary ?? ''));
+
+        if ($text === '') {
+            return null;
+        }
+
+        $cacheKey = Str::lower(mb_substr($text, 0, 400));
+
+        if (array_key_exists($cacheKey, $this->llmCache)) {
+            return $this->llmCache[$cacheKey];
+        }
+
+        try {
+            $answer = $this->llm?->generate(
+                'You are a news categorization engine. Classify the following news item into exactly one of these categories: '
+                .implode(', ', self::CATEGORIES).'. '
+                .'Respond with ONLY a JSON object like {"category": "technology"} and nothing else. '
+                ."News title: {$title}\n"
+                .'News summary: '.($summary ?? 'n/a')."\n",
+                [
+                    'temperature' => 0,
+                    'max_tokens' => 20,
+                    'retries' => 1,
+                ]
+            );
+
+            $category = $this->parseLlmCategory($answer);
+
+            return $this->llmCache[$cacheKey] = $category;
+        } catch (\Throwable $e) {
+            // LLM unavailable (quota, network...). Remember and fall through to
+            // the keyword scorer.
+            $this->llmCache[$cacheKey] = null;
+
+            return null;
+        }
+    }
+
+    protected function parseLlmCategory(?string $answer): ?string
+    {
+        $answer = trim((string) $answer);
+
+        if ($answer === '') {
+            return null;
+        }
+
+        $decoded = json_decode($answer, true);
+        $candidate = is_array($decoded) ? trim((string) ($decoded['category'] ?? '')) : '';
+
+        if ($candidate === '' && preg_match('/\b('.implode('|', self::CATEGORIES).')\b/i', $answer, $m)) {
+            $candidate = Str::lower($m[1]);
+        }
+
+        $candidate = Str::lower($candidate);
+
+        return in_array($candidate, self::CATEGORIES, true) ? $candidate : null;
+    }
+
+    protected function llmEnabled(): bool
+    {
+        if (! config('services.category_classifier.llm_enabled', false)) {
+            return false;
+        }
+
+        return $this->llm !== null && $this->llm->isAvailable();
+    }
+
+    protected function classifyWithKeywords(?string $title, ?string $summary = null): string
     {
         $title = mb_strtolower(trim((string) $title), 'UTF-8');
         $summary = mb_strtolower(trim((string) $summary), 'UTF-8');

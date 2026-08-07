@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Rag;
 
 use App\Models\News;
-use Illuminate\Support\Facades\Http;
+use App\Services\Llm\LlmService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -87,73 +87,55 @@ class GraphRagService
 
     protected function generateAnswer(string $question, string $context, string $locale): array
     {
-        $apiKey = config('services.llm.api_key');
-        $model = config('services.llm.model', 'gemini-1.5-flash');
-
-        $prompt = "You are a helpful news assistant for the DailyNews platform. "
+        $prompt = 'You are a helpful news assistant for the DailyNews platform. '
             ."Answer the user's question in the requested language using ONLY the news context provided below. "
-            ."Cite sources by their [index] number at the end of relevant sentences. "
+            .'Cite sources by their [index] number at the end of relevant sentences. '
             ."If the context does not contain enough information, say so honestly.\n\n"
             ."News context:\n{$context}\n"
             ."User question: {$question}\n"
-            ."Answer:";
+            .'Answer:';
 
-        if (! $apiKey) {
-            // Fallback: return top candidate titles as a basic answer
-            $titles = collect($this->parseContextTitles($context))->map(
-                fn ($t, $i) => "[{$i}] {$t}"
-            )->implode("\n");
+        $llm = app(LlmService::class);
 
-            return [
-                'answer' => "พบข่าวที่เกี่ยวข้องดังนี้:\n{$titles}",
-                'fallback' => true,
-            ];
+        if (! $llm->isAvailable()) {
+            return $this->fallbackAnswer($context);
         }
 
         try {
-            $response = Http::timeout(90)
-                ->withQueryParameters(['key' => $apiKey])
-                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
-                    'contents' => [
-                        [
-                            'parts' => [
-                                ['text' => $prompt],
-                            ],
-                        ],
-                    ],
-                    'generationConfig' => [
-                        'temperature' => 0.3,
-                        'maxOutputTokens' => 1024,
-                    ],
-                ]);
-
-            if (! $response->successful()) {
-                throw new \RuntimeException($response->body());
-            }
+            $text = $llm->generate($prompt, [
+                'temperature' => 0.3,
+                'max_tokens' => 1024,
+                'retries' => 1,
+            ]);
 
             return [
-                'answer' => $response->json('candidates.0.content.parts.0.text') ?? 'ไม่พบคำตอบ',
+                'answer' => $text ?: 'ไม่พบคำตอบ',
             ];
         } catch (\Throwable $e) {
             Log::channel('translation')->warning('Graph RAG LLM call failed', [
                 'error' => $e->getMessage(),
             ]);
 
-            // Fallback: return matched news titles so the search still works
-            // when the LLM is unavailable (e.g. API quota exhausted).
-            $titles = collect($this->parseContextTitles($context))->map(
-                fn ($t, $i) => "[{$i}] {$t}"
-            )->implode("\n");
-
-            $answer = $titles !== ''
-                ? "พบข่าวที่เกี่ยวข้องดังนี้:\n{$titles}"
-                : 'ขออภัย ไม่สามารถประมวลผลคำถามได้ในขณะนี้ โปรดลองใหม่อีกครั้ง';
-
-            return [
-                'answer' => $answer,
-                'fallback' => true,
-            ];
+            return $this->fallbackAnswer($context);
         }
+    }
+
+    protected function fallbackAnswer(string $context): array
+    {
+        // Fallback: return matched news titles so the search still works
+        // when the LLM is unavailable (e.g. API quota exhausted).
+        $titles = collect($this->parseContextTitles($context))->map(
+            fn ($t, $i) => "[{$i}] {$t}"
+        )->implode("\n");
+
+        $answer = $titles !== ''
+            ? "พบข่าวที่เกี่ยวข้องดังนี้:\n{$titles}"
+            : 'ขออภัย ไม่สามารถประมวลผลคำถามได้ในขณะนี้ โปรดลองใหม่อีกครั้ง';
+
+        return [
+            'answer' => $answer,
+            'fallback' => true,
+        ];
     }
 
     protected function parseContextTitles(string $context): array
