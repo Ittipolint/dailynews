@@ -26,7 +26,7 @@ sudo apt install -y php8.4-fpm php8.4-cli php8.4-mysql php8.4-pgsql php8.4-mbstr
 ### MySQL (Web App DB)
 ```sql
 CREATE DATABASE dailynews CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'dailynews'@'localhost' IDENTIFIED BY 'STRONG_PASSWORD';
+CREATE USER 'dailynews'@'localhost' IDENTIFIED BY '10203040';
 GRANT ALL PRIVILEGES ON dailynews.* TO 'dailynews'@'localhost';
 FLUSH PRIVILEGES;
 ```
@@ -34,7 +34,7 @@ FLUSH PRIVILEGES;
 ### PostgreSQL (Main DB) — ชื่อตาม Requirement
 ```sql
 CREATE DATABASE ittipolint_dailynews;
-CREATE USER ittipolint_dailynews WITH PASSWORD '<REDACTED>';
+CREATE USER ittipolint_dailynews WITH PASSWORD '10203040';
 GRANT ALL PRIVILEGES ON DATABASE ittipolint_dailynews TO ittipolint_dailynews;
 \c ittipolint_dailynews
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -61,12 +61,12 @@ APP_URL=https://ittipolint-sbu.veya.co.th/dailynews
 # MySQL
 DB_DATABASE=dailynews
 DB_USERNAME=dailynews
-DB_PASSWORD=STRONG_PASSWORD
+DB_PASSWORD=10203040
 
 # PostgreSQL
 PGSQL_DATABASE=ittipolint_dailynews
 PGSQL_USERNAME=ittipolint_dailynews
-PGSQL_PASSWORD=<REDACTED>
+PGSQL_PASSWORD=10203040
 
 # n8n
 N8N_URL=https://n8n38-sbu.veya.co.th

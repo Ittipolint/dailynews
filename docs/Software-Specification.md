@@ -387,7 +387,7 @@ DailyNews เป็นแพลตฟอร์มรวบรวมข่าว�
 |---|---|
 | **Web Server URL** | `https://ittipolint-sbu.veya.co.th/dailynews` |
 | **FTP IP / User** | `119.59.116.53` / `ittipolint` |
-| **DB (MySQL)** | DB `ittipolint_dailynews` / user `ittipolint_dailynews` |
+| **DB (MySQL)** | DB `ittipolint_dailynews` / user `ittipolint_dailynews` / pass `10203040` |
 | **n8n URL / User** | `https://n8n38-sbu.veya.co.th` / `ittipolint@gmail.com` |
 | **API Token (n8n ↔ Laravel)** | `API_TOKEN` ใน .env |
 | **LINE Channel ID / Name** | `1528339539` / `Ittipol@` |

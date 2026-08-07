@@ -40,7 +40,7 @@ services:
       MYSQL_DATABASE: ${DB_DATABASE:-dailynews}
       MYSQL_USER: ${DB_USERNAME:-dailynews}
       MYSQL_PASSWORD: ${DB_PASSWORD:-dailynews}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootsecret}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-10203040}
     ports:
       - "3306:3306"
     volumes:

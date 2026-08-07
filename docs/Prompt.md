@@ -50,7 +50,7 @@
                  Pass: 10203040 (no need to hide)
         3.1.3 Database name: ittipolint_dailynews
                  User: ittipolint_dailynews
-                 Pass: <REDACTED - stored in deploy secrets>
+                 Pass: 10203040
     3.2 n8n Server
         3.2.1 https://n8n38-sbu.veya.co.th
         3.2.2 user: ittipolint@gmail.com
